@@ -1,0 +1,40 @@
+CONFIG=./configs/ae/train/pca_config.json
+LR=(0.001 0.01)
+# LR=(1)
+DP=(0.2 0.1)
+LOSS=("mae" "mse")
+HD=([64] [128 32])
+EP=5
+for lr in "${LR[@]}"; do
+    ./scripts/ae.sh \
+        --config $CONFIG \
+        --lr $lr \
+        --epoch $EP
+done
+
+# for HD in "${HD[@]}"; do
+#     for dp in "${DP[@]}"; do
+#         for lr in "${LR[@]}"; do
+#             ./scripts/ae.sh \
+#                 # srun -p v100\
+#                 --config $config \
+#                 --lr $lr
+#         done
+#     done
+# done
+
+
+CONFIG=./configs/ae/train/pca_config.json
+LR=(0.01 0.003 0.01)
+
+for HD in "${HD[@]}"; do
+    for LD in "${LD[@]}"; do
+        for dp in "${DP[@]}"; do
+            for lr in "${LR[@]}"; do
+                ./scripts/ae.sh \
+                    --config $config \
+                    --lr $lr
+            done
+        done
+    done
+done
