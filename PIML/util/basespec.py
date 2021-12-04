@@ -1,8 +1,8 @@
 import numpy as np
 import scipy as sp
 
-from .constants import Constants
-class BaseSpec(Constants):
+from .util import Util
+class BaseSpec(Util):
     """
     Base class for all specifications.
     """
@@ -12,7 +12,7 @@ class BaseSpec(Constants):
 
     @staticmethod
     def init_W(W):
-        Ws = Constants.DWs[W]
+        Ws = Util.DWs[W]
         return Ws
 
     @staticmethod
@@ -153,22 +153,3 @@ class BaseSpec(Constants):
 
 # --------------------------------------------------------------------------------- 
 # ---------------------------------------------------------------------------------
-    @staticmethod
-    def get_pmt_name(m,t,g,c,a):
-        #----------------------------------
-        # get short name for the spectrum
-        #----------------------------------
-        fname = 'T'+ BaseSpec.fmn(t)+'G'+BaseSpec.fmn(10*g)+'M'+BaseSpec.fmt(m)+'A'+BaseSpec.fmt(a)+'C'+BaseSpec.fmt(c)
-        return fname
-
-    @staticmethod
-    def fmn(x):    
-        return '{:02d}'.format(np.floor(x).astype(np.int32))
-
-    @staticmethod
-    def fmt(x):
-        y = np.round(np.abs(10*x)+0.2).astype(np.int32)
-        z = '{:+03.0f}'.format(y).replace('+','p')
-        if (np.sign(x)<0):
-            z = z.replace('p','m')
-        return z
