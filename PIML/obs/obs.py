@@ -12,7 +12,7 @@ class Obs(BaseSpec):
         self.snrList = [11,22,33,55,110]
         self.nlList = None
         self.LLH = LLH()
-        self.snr_from_nl = None
+        self.get_snr_from_nl = None
 
 
 
@@ -24,8 +24,8 @@ class Obs(BaseSpec):
     def prepare_sky(self, wave, flux_in_res, step):
         sky_H = self.load_sky_H()
         self.sky_in_res = Obs.resampleSky(sky_H, wave, step)
-        self.snr_from_nl = self.interp_nl_fn(flux_in_res)
-        self.nlList = self.snr_from_nl(self.snrList)
+        self.get_snr_from_nl = self.interp_nl_fn(flux_in_res)
+        self.nlList = self.get_snr_from_nl(self.snrList)
 
     def add_obs_to_flux(self, flux_in_res, noise_level):
         var_in_res = Obs.get_var(flux_in_res, self.sky_in_res)

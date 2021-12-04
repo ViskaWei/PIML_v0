@@ -1,6 +1,8 @@
 
 import numpy as np
 from PIML.util.basebox import BaseBox
+from PIML.util.baseplot import BasePlot
+
 from PIML.obs.obs import Obs
 from PIML.method.llh import LLH
 from PIML.method.rbf import RBF
@@ -21,6 +23,7 @@ class BoxWR(BaseBox):
         self.Obs = Obs()
         self.RBF = RBF()
         self.LLH = LLH()
+        self.PLT = BasePlot()
 
 # init------------------------------------------------------------------------
 
@@ -41,6 +44,7 @@ class BoxWR(BaseBox):
     def init(self, W, R, Res, step):
         self.init_W(W)
         self.init_R(R)
+        self.init_plot()
         self.Res = Res
         self.step = step
         wave_H, flux_H, self.pdx, self.para = self.IO.load_bosz(Res, RR=self.RR)
@@ -54,6 +58,10 @@ class BoxWR(BaseBox):
 
         self.build_rbf(self.flux)
         self.init_LLH()
+
+    def init_plot(self):
+        self.PLT.make_box_fn = lambda x: self.PLT.box_fn(self.PhyRng, self.PhyMin, self.PhyMax, n_box=x, c=BoxWR.DRC[self.R])
+
 
     def init_sky(self, wave_H, flux, step):
         self.Obs.prepare_sky(wave_H, flux, step)
@@ -103,7 +111,7 @@ class BoxWR(BaseBox):
     
 
     def make_obs_from_pmt(self, pmt, snr, N=1, plot=0):
-        noise_level = self.Obs.snr_from_nl(snr)
+        noise_level = self.Obs.get_snr_from_nl(snr)
         flux = self.get_model(pmt)
         if N==1:
             obsflux, obsvar = self.Obs.add_obs_to_flux(flux, noise_level)
@@ -128,25 +136,25 @@ class BoxWR(BaseBox):
             self.plot_eval_LLH(pmt, preds, pdxs, snr)
         return preds
 
-    def eval_LLH_NL(self, noise_level, pmts=None, pdxs=[0,1,2], N_pmt=10, n_box=0.5):
-        if pmts is None: pmts = self.get_random_pmt(N_pmt)
+    def eval_LLH_snr(self, snr, pmts=None, pdxs=[0,1,2], N_pmt=10, N_obs=10, n_box=0.5):
+        if pmts is None: pmts = self.get_random_grid_pmt(N_pmt)
         fns = []
         for pmt in tqdm(pmts):
-            preds_pmt = self.eval_LLH_at_pmt(pmt, pdxs, noise_level=noise_level, N_obs=100, plot=0)
-            fns_pmt = self.flow_fn_i(preds_pmt, pmt[pdxs], legend=0)
+            preds_pmt = self.eval_LLH_at_pmt(pmt, pdxs, snr=snr, N_obs=N_obs, plot=0)
+            fns_pmt = self.PLT.flow_fn_i(preds_pmt, pmt[pdxs], legend=0)
             fns = fns + fns_pmt
 
-        f = self.plot_box(pdxs, fns = fns, n_box=n_box)
-        f.suptitle(f"NL={noise_level}")
+        f = self.PLT.plot_box(pdxs, fns = fns, n_box=n_box)
+        f.suptitle(f"SNR={snr}")
 
     def eval_LLH(self, pmts=None, pdxs=[0,1,2], N_pmt=10, n_box=0.5):
-        if pmts is None: pmts = self.get_random_pmt(N_pmt)
-        for NL in [1,10,50,100]:
-            self.eval_LLH_NL(NL, pmts, pdxs, N_pmt, n_box)
+        if pmts is None: pmts = self.get_random_grid_pmt(N_pmt)
+        for snr in [10,20,30,50]:
+            self.eval_LLH_snr(snr, pmts, pdxs, N_pmt, n_box)
 
     def plot_eval_LLH(self, pmt, pred, pdxs, snr, n_box=0.5):
-        fns = self.flow_fn_i(pred, pmt[pdxs], snr, legend=0)
-        f = self.plot_box(pdxs, fns = fns, n_box=n_box)
+        fns = self.PLT.flow_fn_i(pred, pmt[pdxs], snr, legend=0)
+        f = self.PLT.plot_box(pdxs, fns = fns, n_box=n_box)
         f.suptitle(f"SNR = {snr}")
 
     def get_random_grid_pmt(self, N_pmt):
