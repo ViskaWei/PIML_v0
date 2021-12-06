@@ -8,11 +8,12 @@ class Obs(BaseSpec):
     def __init__(self):
         self.DATADIR = '/home/swei20/LV/data/fisher/'
         self.sky = None
-        self.noise_level_grid = [2,5,10,20,50,100,200,500]
-        self.snrList = [11,22,33,55,110]
+        self.noise_level_grid = [2,5,10,20,30,40,50,100,200]
+        # self.snrList = [11,22,33,55,110]
+        self.snrList = [10, 20, 30, 50]
         self.nlList = None
         self.LLH = LLH()
-        self.get_snr_from_nl = None
+        self.snr2nl = None
 
 
 
@@ -24,8 +25,10 @@ class Obs(BaseSpec):
     def prepare_sky(self, wave, flux_in_res, step):
         sky_H = self.load_sky_H()
         self.sky_in_res = Obs.resampleSky(sky_H, wave, step)
-        self.get_snr_from_nl = self.interp_nl_fn(flux_in_res)
-        self.nlList = self.get_snr_from_nl(self.snrList)
+        self.snr2nl = self.get_snr2nl_fn(flux_in_res)
+        self.nlList = self.snr2nl(self.snrList)
+
+
 
     def add_obs_to_flux(self, flux_in_res, noise_level):
         var_in_res = Obs.get_var(flux_in_res, self.sky_in_res)
@@ -64,9 +67,19 @@ class Obs(BaseSpec):
         sn = s1/n1
         return sn
 
+    @staticmethod
+    def get_avg_snr(fluxs, top=10):
+        if isinstance(fluxs, list) or (len(fluxs.shape)>1):
+            SNs = []
+            for nsflux in fluxs[:top]:
+                SNs.append(Obs.get_snr(nsflux))
+            return np.mean(SNs)
+        else:
+            print("not list")
+            return Obs.get_snr(fluxs)
 
 
-    def interp_nl_fn(self, flux_in_res):
+    def get_snr2nl_fn(self, flux_in_res):
         #-----------------------------------------
         # choose the noise levels so that the S/N 
         # comes at around the predetermined levels
@@ -85,33 +98,33 @@ class Obs(BaseSpec):
 
 
 
-    def make_nlList(self, flux_H, skym, step=5):
-        #-----------------------------------------
-        # choose the noise levels so that the S/N 
-        # comes at around the predetermined levels
-        #-----------------------------------------
+    # def make_nlList(self, flux_H, skym, step=5):
+    #     #-----------------------------------------
+    #     # choose the noise levels so that the S/N 
+    #     # comes at around the predetermined levels
+    #     #-----------------------------------------
         
-        if self.snrList is None:
-            self.snrList = [11,22,33,55,110]
-        if self.noise_level_grid is None:
-            self.noise_level_grid = [2,5,10,20,50,100,200,500]
+    #     if self.snrList is None:
+    #         self.snrList = [11,22,33,55,110]
+    #     if self.noise_level_grid is None:
+    #         self.noise_level_grid = [2,5,10,20,50,100,200,500]
 
 
 
-        # ssm   = Util.getModel(ss,0)
-        ssm   = Obs.resampleFlux_i(flux_H, step)       
-        varm  = Obs.get_var(ssm,skym)
-        noise = Obs.get_noise(varm)  
+    #     # ssm   = Util.getModel(ss,0)
+    #     ssm   = Obs.resampleFlux_i(flux_H, step)       
+    #     varm  = Obs.get_var(ssm,skym)
+    #     noise = Obs.get_noise(varm)  
 
-        SN = []
-        for noise_level in self.noise_level_grid:
-            ssobs = ssm + noise_level * noise
-            sn    = Obs.get_snr(ssobs)
-            SN.append(sn)
-        f = sp.interpolate.interp1d(SN, self.noise_level_grid, fill_value=0)
+    #     SN = []
+    #     for noise_level in self.noise_level_grid:
+    #         ssobs = ssm + noise_level * noise
+    #         sn    = Obs.get_snr(ssobs)
+    #         SN.append(sn)
+    #     f = sp.interpolate.interp1d(SN, self.noise_level_grid, fill_value=0)
         
-        noise_level_interpd = f(self.snrList)  
-        return noise_level_interpd
+    #     noise_level_interpd = f(self.snrList)  
+    #     return noise_level_interpd
 
 
     

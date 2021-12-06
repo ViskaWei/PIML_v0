@@ -125,13 +125,14 @@ class BasePlot(object):
         return add_ellipse
 
     @staticmethod
-    def box_fn(pRange, pMin, pMax,  n_box=None, c="k"):
+    def box_fn(pRange, pMin, pMax,  n_box=None, c="k", RR=None):
+        box_label = "box" if RR is None else f"{RR}-box"
         def fn(i, j , ax, handles=[]):
             if n_box is not None:
                 ax.set_xlim(pMin[i]-n_box*pRange[i], pMax[i]+n_box*pRange[i])
                 ax.set_ylim(pMin[j]-n_box*pRange[j], pMax[j]+n_box*pRange[j])
             ax.add_patch(Rectangle((pMin[i],pMin[j]),(pRange[i]),(pRange[j]),edgecolor=c,lw=2, facecolor="none"))
-            handles.append(Patch(facecolor='none', edgecolor=c, label=f"Box")) 
+            handles.append(Patch(facecolor='none', edgecolor=c, label=box_label)) 
             return handles
         return fn
 
@@ -155,7 +156,7 @@ class BasePlot(object):
         npdx = len(pdxs)
         if axs is None: 
             f, axs = plt.subplots(1, npdx, figsize=(5*npdx, 4), facecolor="w")
-        fns = fns + self.make_box_fn(n_box)
+        fns = fns + [self.make_box_fn(n_box)]
         if data is not None:
             fns = fns +  [BasePlot.scatter_fn(data, c="b")]
         for i, ax in enumerate(axs):
