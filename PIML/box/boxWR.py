@@ -101,10 +101,11 @@ class BoxWR(BaseBox):
         rbf_mu = self.RBF.build_rbf(rbf_interp_mu, self.pmt2pdx_scaler, None)
         rbf_interp_coeff = self.RBF.train_rbf(self.pdx0, pcflux)
         rbf_coeff = self.RBF.build_rbf(rbf_interp_coeff, self.pmt2pdx_scaler, None)
+        self.rbf_coeff = rbf_coeff
+        
         def interp_fn(x):
             mu = rbf_mu(x)
             coeff = rbf_coeff(x)
-            print(mu.shape, coeff.shape)
             logflux = coeff.dot(self.eigv) + mu
             return np.exp(logflux)
         return interp_fn
@@ -144,7 +145,7 @@ class BoxWR(BaseBox):
             fdx = self.Obs.get_fdx_from_pmt(pmt, self.para)
             flux = self.flux[fdx]
         else:
-            flux = self.interp([pmt])[0]
+            flux = self.interp(pmt)
         if plot: self.Obs.plot_spec(self.wave, flux, pmt=pmt)
         return flux
     
@@ -165,7 +166,7 @@ class BoxWR(BaseBox):
 
     def eval_LLH_at_pmt(self, pmt, pdxs=[1], snr=10, N_obs=10, plot=0):
         obsfluxs , obsvar = self.make_obs_from_pmt(pmt, snr, N=N_obs)
-        snr = self.Obs.get_avg_snr(obsfluxs)
+        snr = self.Obs.get_avg_snr(obsfluxs, top = N_obs)
         fns = self.LLH.get_eval_LLH_fns(pdxs, pmt, obsvar)
         preds = []
         for fn_pdx, fn in fns.items():

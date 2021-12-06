@@ -22,9 +22,17 @@ class RBF(object):
         if coord_scaler is None: coord_scaler = self.coord_scaler
         if interp_scaler is None: interp_scaler = self.interp_scaler
         def rbf(x):
+            flag = False
+            if x.ndim == 1: 
+                x = [x]
+                flag = True
             x_scale = coord_scaler(x)
             interp = rbf_interpolator(x_scale)
-            return interp_scaler(interp)
+            out = interp_scaler(interp)
+            if flag: 
+                return out[0]
+            else:
+                return out
         return rbf
 
 
