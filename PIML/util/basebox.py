@@ -132,3 +132,5 @@ class BaseBox(Constants):
         RR = BaseBox.DRR[R]
         if save: IO.save_bosz_box(Res, RR, wave, boxFlux, boxPdx, boxPara, overwrite=1)
         return boxFlux, boxPdx, boxPara
+
+
