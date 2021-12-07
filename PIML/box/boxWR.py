@@ -24,7 +24,9 @@ class BoxWR(BaseBox):
         self.RBF = RBF()
         self.LLH = LLH()
         self.PLT = BasePlot()
+        self.topk = None
         np.random.seed(1015)
+
 
 # init------------------------------------------------------------------------
 
@@ -122,6 +124,7 @@ class BoxWR(BaseBox):
             u = u[:, :top]
             s = s[:top]
             v = v[:top]
+            self.topk = top
         print(s[:10].round(2))
         assert abs(np.mean(np.sum(v.dot(v.T), axis=0)) -1) < 1e-5
         assert abs(np.sum(v, axis=1).mean()) < 0.1
@@ -151,7 +154,10 @@ class BoxWR(BaseBox):
     
 
     def make_obs_from_pmt(self, pmt, snr, N=1, plot=0):
-        noise_level = self.Obs.snr2nl(snr)
+        if snr == np.inf: 
+            noise_level = 0
+        else:
+            noise_level = self.Obs.snr2nl(snr)
         flux = self.get_model(pmt)
         if N==1:
             obsflux, obsvar = self.Obs.add_obs_to_flux(flux, noise_level)
@@ -166,7 +172,8 @@ class BoxWR(BaseBox):
 
     def eval_LLH_at_pmt(self, pmt, pdxs=[1], snr=10, N_obs=10, plot=0):
         obsfluxs , obsvar = self.make_obs_from_pmt(pmt, snr, N=N_obs)
-        snr = self.Obs.get_avg_snr(obsfluxs, top = N_obs)
+        if snr !=np.inf: 
+            snr = self.Obs.get_avg_snr(obsfluxs, top = N_obs)
         fns = self.LLH.get_eval_LLH_fns(pdxs, pmt, obsvar)
         preds = []
         for fn_pdx, fn in fns.items():
@@ -176,6 +183,93 @@ class BoxWR(BaseBox):
         if plot:
             self.plot_eval_LLH(pmt, preds, pdxs, snr)
         return preds, snr
+
+    def eval_coeff_bias(self, pmt, snr=10, N_obs=10, plot=0, N_plot=None):
+        coeff = self.rbf_coeff(pmt)
+        obsfluxs, obsvar = self.make_obs_from_pmt(pmt, snr, N=N_obs)
+        logobsflux = self.Obs.safe_log(obsfluxs)
+        COEFF = logobsflux.dot(self.eigv.T)
+        if snr !=np.inf: 
+            snr = self.Obs.get_avg_snr(obsfluxs, top = N_obs)
+        if plot: 
+            if N_plot is None: N_plot = self.topk // 2 -1
+            self.plot_eval_coeff_bias(COEFF, coeff, pmt, snr, N_plot = N_plot)
+        return COEFF, coeff, snr
+
+
+    def plot_eval_coeff_bias(self, pred, truth, pmt, snr, N_plot, n_box=0.5):
+        fns = self.PLT.flow_fn_i(pred, truth, snr, legend=0)
+        f = self.PLT.plotN(N_plot=N_plot, fns = fns, lbl="PC - a")
+        name = self.Obs.get_pmt_name(*pmt)
+        f.suptitle(f'{name} || snr {snr:.1f}')
+        f.tight_layout()
+
+
+
+    def plot_coeff_cdxs(self, COEFF, coeff, pmt, snr, N=3):
+        N = np.min([N, len(coeff)])
+        f, axs = plt.subplots(1,N, figsize=(N*3,3), facecolor="w")
+        for ii in range(N):
+            ax = axs[ii]
+            self.plot_coeff_cdx(coeff, COEFF, 2*ii, 2*ii + 1, ax=ax)
+        name = self.Obs.get_pmt_name(*pmt)
+        f.suptitle(f'{name} || snr {snr:.1f}')
+        f.tight_layout()
+
+    def eval_coeff_snr(self, snr, pmts=None, N_pmt=10, N_obs=10, N_plot=None):
+        if pmts is None: pmts = self.get_random_grid_pmt(N_pmt)
+        if N_plot is None: N_plot = self.topk // 2 - 1
+        fns = []
+        SNRs= []
+        for pmt in tqdm(pmts):
+            COEFF, coeff, SNR = self.eval_coeff_bias(pmt, snr=snr, N_obs=N_obs, plot=0, N_plot=N_plot)
+            fns_pmt = self.PLT.flow_fn_i(COEFF, coeff, legend=0)
+            fns = fns + fns_pmt
+            SNRs.append(SNR)
+        f = self.PLT.plotN(N_plot=N_plot, fns = fns, lbl="PC - a")
+        name = self.Obs.get_pmt_name(*pmt)
+        f.suptitle(f'{name} || snr {snr:.1f}')
+        f.tight_layout()
+
+
+    def eval_coeff(self, snrList=[50], pmts=None, N_pmt=10, N_obs=10, N_plot=None):
+        if pmts is None: pmts = self.get_random_grid_pmt(N_pmt)
+        if N_plot is None: N_plot = self.topk // 2 - 1
+        fns = {}
+        SNRs = {}
+        N_snr = len(snrList)
+        fig, axss = plt.subplots(N_snr, N_plot, figsize=(N_plot*3, N_snr*3), facecolor="w", sharex="col", sharey="row")
+        
+        for ii, snr in enumerate(snrList):
+            fns_snr = []
+            SNRs_snr= []
+            axs = axss[ii]
+            for pmt in tqdm(pmts):
+                COEFF, coeff, SNR = self.eval_coeff_bias(pmt, snr=snr, N_obs=N_obs, plot=0, N_plot=N_plot)
+                fns_pmt = self.PLT.flow_fn_i(COEFF, coeff, legend=0)
+                fns_snr = fns_snr + fns_pmt
+                SNRs_snr.append(SNR)
+            fns[snr] = fns_snr
+            SNR_snr = np.mean(SNRs_snr)
+            SNRs[snr] = SNR_snr
+            self.PLT.plotN(N_plot=N_plot, fns = fns_snr, lbl="PC - a", axs=axs)
+            axs[0].set_title(f'SNR {SNR_snr:.1f}')
+        name = self.Obs.get_pmt_name(*pmt)
+        fig.suptitle(f'{name}')
+        fig.tight_layout()
+        return fns, SNRs
+
+    def plot_coeff_cdx(self, coeff, COEFF, cdx1, cdx2, ax=None):
+        if ax is None: fig, ax = plt.subplots(1,1)
+        data1, data2 = COEFF[:,cdx1], COEFF[:,cdx2]
+        ax.plot(data1, data2, "o", color="gray", markersize=2)
+        ax.plot(coeff[cdx1], coeff[cdx2], "ro", label="$a_k$")
+        ax.plot(data1.mean(), data2.mean(), "go", label="$b_k$")
+        ax.legend()
+
+        ax.set_xlabel(f"PC - a{cdx1}")
+        ax.set_ylabel(f"PC - a{cdx2}") 
+
 
     def eval_LLH_snr(self, snr, pmts=None, pdxs=[0,1,2], N_pmt=10, N_obs=10, n_box=0.5):
         if pmts is None: pmts = self.get_random_grid_pmt(N_pmt)
@@ -206,3 +300,48 @@ class BoxWR(BaseBox):
         idx = np.random.randint(0, len(self.para), N_pmt)
         pmts = self.para[idx]
         return pmts
+
+    def plot_coeff_on_pmt(self, fn, topk=10, axis="T", fn_name=""):
+        adx = BoxWR.PhyShort.index(axis)
+        pmt = np.copy(self.PhyMid)
+        x = pmt[adx]
+        def fn_adx(X):
+            pmt[adx] = X
+            return fn(pmt)
+        x_large = np.linspace(self.PhyMin[adx], self.PhyMax[adx], 101)
+        x_small = np.linspace(x - BoxWR.PhyTick[adx], x + BoxWR.PhyTick[adx], 25)
+        y1 = []
+        y2 = []
+        for xi in x_large:
+            y1.append(fn_adx(xi))
+        y1 = np.array(y1).T
+        for xj in x_small:
+            y2.append(fn_adx(xj))
+        y2 = np.array(y2).T
+        fn_x_val = fn_adx(x)
+        # MLE_X = -1 * fn(X)
+        plt.figure(figsize=(15,6), facecolor="w")
+        for ii in range(topk):
+            plt.plot(x_large, y1[ii], "o",markersize=7, label = f"PC-a{ii}")    
+            # plt.plot(x,       fn_x_val[ii], 'ro', label=f"Truth {fn_x_val[ii]:.2f}")
+            plt.plot(x,       fn_x_val[ii], 'ro')
+
+        # plt.plot(X, MLE_X, 'ko', label=f"Estimate {MLE_X:.2f}")
+        xname = BoxWR.PhyLong[adx]
+        ts = ""
+        # ts = f'{xname} Truth={x:.2f}K, {xname} Estimate={X:.2f}K, S/N={SN:3.1f}'
+        # ts = ts +  'sigz={:6.4f} km/s,  '.format(np.sqrt(sigz2))
+        plt.title(ts)
+        plt.xlim(self.PhyMin[adx], self.PhyMax[adx])
+        plt.xlabel(f"{xname}")
+        plt.ylabel(fn_name)
+        plt.grid()
+        plt.legend()
+        # ax = plt.gca()
+        # plt.ylim((min(y1),min(y1)+(max(y1)-min(y1))*1.5))
+        # ins = ax.inset_axes([0.1,0.45,0.4,0.5])
+        # ins.plot(x_small,y2,'g.-',markersize=7)
+        # ins.plot(x, fn_x_val, 'ro')
+        # # ins.plot(X, MLE_X, 'ko')
+        # ins.grid()
+
