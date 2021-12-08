@@ -8,9 +8,9 @@ class Obs(BaseSpec):
     def __init__(self):
         self.DATADIR = '/home/swei20/LV/data/fisher/'
         self.sky = None
-        self.noise_level_grid = [2,5,10,20,30,40,50,100,200]
+        self.noise_level_grid = [2,5,10,20,30,40,50,100,200,500,1000]
         # self.snrList = [11,22,33,55,110]
-        self.snrList = [10, 20, 30, 50]
+        self.snrList = [10, 20, 30, 50, 100]
         self.nlList = None
         self.LLH = LLH()
         self.snr2nl = None
@@ -47,9 +47,11 @@ class Obs(BaseSpec):
 
     def add_obs_to_flux_N(self, flux_in_res, noise_level, N):
         var_in_res = Obs.get_var(flux_in_res, self.sky_in_res)
+        print("noise_level", noise_level)
         obsvar_in_res = var_in_res * noise_level**2
         obsflux_in_res = Obs.get_obsflux_N(flux_in_res, var_in_res, noise_level, N)
         return obsflux_in_res, obsvar_in_res
+
 
 #noise ---------------------------------------------------------------------------------
     @staticmethod
@@ -84,6 +86,7 @@ class Obs(BaseSpec):
         # choose the noise levels so that the S/N 
         # comes at around the predetermined levels
         #-----------------------------------------
+        # self.noise_level_grid = [2,5,10,20,30,40,50,100,200]
 
         var_in_res = Obs.get_var(flux_in_res, self.sky_in_res)
         noise      = Obs.get_noise(var_in_res)
@@ -93,6 +96,7 @@ class Obs(BaseSpec):
             ssobs = flux_in_res + noise_level * noise
             sn    = Obs.get_snr(ssobs)
             SN.append(sn)
+        print(SN)
         f = sp.interpolate.interp1d(SN, self.noise_level_grid, fill_value=0)
         return f
 
@@ -144,7 +148,7 @@ class Obs(BaseSpec):
 
     @staticmethod
     def get_noise_N(varm, N):
-        out = np.zeros((N,varm.shape[0]))
+        out = np.zeros((N, varm.shape[0]))
         for i in range(N):
             out[i] = np.random.normal(0, np.sqrt(varm), len(varm))
         return out

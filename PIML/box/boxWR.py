@@ -44,23 +44,26 @@ class BoxWR(BaseBox):
     def get_flux_in_Wrange(self, wave, flux):
         return Obs._get_flux_in_Wrange(wave, flux, self.Ws)
 
-    def init(self, W, R, Res, step, onPCA=1):
+    def init(self, W, R, Res, step, topk=10, onPCA=1):
         self.init_W(W)
         self.init_R(R)
         self.init_plot()
         self.Res = Res
         self.step = step
+        self.onPCA = onPCA
+        self.topk = topk
         wave_H, flux_H, self.pdx, self.para = self.IO.load_bosz(Res, RR=self.RR)
         self.pdx0 = self.pdx - self.pdx[0]
-
         self.wave_H, flux_H = self.get_flux_in_Wrange(wave_H, flux_H)
+        self.flux_H = flux_H[0]
+
         self.wave, self.flux = self.downsample(flux_H)
-        
+        self.flux_M = self.flux[0]
         self.flux0 = self.get_model(self.PhyMid, onGrid=1, plot=1)
         self.init_sky(self.wave_H, self.flux0, step)
 
         self.logflux = self.Obs.safe_log(self.flux)
-        self.interp = self.run_step_rbf(self.logflux, onPCA=onPCA)
+        self.interp_obs, self.interp_model = self.run_step_rbf(self.logflux, onPCA=onPCA)
         self.init_LLH()
 
     def init_plot(self):
@@ -87,7 +90,7 @@ class BoxWR(BaseBox):
 
     def run_step_rbf(self, logflux, onPCA=1):
         if onPCA:
-            mu, pcflux = self.run_step_pca(logflux)
+            mu, pcflux = self.run_step_pca(logflux, top=self.topk)
             interp_fn = self.build_PC_rbf(mu, pcflux)
         else:
             interp_fn = self.build_logflux_rbf(logflux)
@@ -101,16 +104,23 @@ class BoxWR(BaseBox):
     def build_PC_rbf(self, mu, pcflux):
         rbf_interp_mu = self.RBF.train_rbf(self.pdx0, mu)
         rbf_mu = self.RBF.build_rbf(rbf_interp_mu, self.pmt2pdx_scaler, None)
+        self.rbf_mu = rbf_mu
         rbf_interp_coeff = self.RBF.train_rbf(self.pdx0, pcflux)
         rbf_coeff = self.RBF.build_rbf(rbf_interp_coeff, self.pmt2pdx_scaler, None)
         self.rbf_coeff = rbf_coeff
         
-        def interp_fn(x):
+        def interp_obs_fn(x):
             mu = rbf_mu(x)
             coeff = rbf_coeff(x)
             logflux = coeff.dot(self.eigv) + mu
             return np.exp(logflux)
-        return interp_fn
+
+        def interp_model_fn(x):
+            coeff = rbf_coeff(x)
+            lognorm = coeff.dot(self.eigv)
+            return np.exp(lognorm)
+
+        return interp_obs_fn, interp_model_fn
 
     def run_step_pca(self, logflux, top=10):
 
@@ -136,36 +146,71 @@ class BoxWR(BaseBox):
     def test_rbf(self, pmt1, pmt2, pmt=None):
         flux1, flux2 = self.get_model(pmt1,onGrid=1),  self.get_model(pmt2,onGrid=1)
         if pmt is None: pmt = 0.5 * (pmt1 + pmt2)
-        interpFlux = self.interp([pmt])[0]
+        interpFlux = self.interp_obs(pmt)
         plt.plot(self.wave, interpFlux, label= pmt)
         plt.plot(self.wave, flux1, label = pmt1)
         plt.plot(self.wave, flux2, label = pmt2)
         plt.legend()
 
 # model------------------------------------------------------------------------
-    def get_model(self, pmt, onGrid=0, plot=0):
-        if onGrid:
-            fdx = self.Obs.get_fdx_from_pmt(pmt, self.para)
-            flux = self.flux[fdx]
+    def get_model(self, pmt, norm=0, onGrid=0, plot=0):
+        if norm:
+            flux = self.interp_model(pmt)
         else:
-            flux = self.interp(pmt)
+            if onGrid:
+                fdx = self.Obs.get_fdx_from_pmt(pmt, self.para)
+                flux = self.flux[fdx]
+            else:
+                flux = self.interp_obs(pmt)
         if plot: self.Obs.plot_spec(self.wave, flux, pmt=pmt)
         return flux
     
 
-    def make_obs_from_pmt(self, pmt, snr, N=1, plot=0):
+    def make_obs_from_pmt(self, pmt, snr, N=1, plot=0, onPCA=0, onGrid=1):
         if snr == np.inf: 
             noise_level = 0
         else:
             noise_level = self.Obs.snr2nl(snr)
-        flux = self.get_model(pmt)
-        if N==1:
-            obsflux, obsvar = self.Obs.add_obs_to_flux(flux, noise_level)
-            if plot: self.Obs.plot_noisy_spec(self.wave, flux, obsflux, pmt)
+        flux = self.get_model(pmt, norm=0, onGrid=0)
+        np.random.seed(1015)
+        obsfluxs, obsvar = self.Obs.add_obs_to_flux_N(flux, noise_level, N)
+        if plot: self.Obs.plot_noisy_spec(self.wave, flux, obsfluxs[0], pmt)
+        if onPCA:
+            normflux = self.get_model(pmt, norm=1)
+            A = np.exp(self.rbf_mu(pmt))
+            A0 = obsfluxs.mean(1).mean() / normflux.mean() 
+            print(f"A = {A}, dA = {A-A0}")
+            bias = self.get_bias(normflux, obsvar, A=A)
+            # print(normflux - flux)
+            if N == 1: obsfluxs = obsfluxs[0]
+            return obsfluxs, obsvar, bias, A
         else:
-            obsflux, obsvar = self.Obs.add_obs_to_flux_N(flux, noise_level, N)
-        return obsflux, obsvar
-    
+            if N == 1: obsfluxs = obsfluxs[0]
+            return obsfluxs, obsvar
+
+    def get_bias(self, flux, obsvar, A=1):
+        x = np.divide(obsvar**0.5, A * flux)
+        bias1 = self.eigv.dot(x)
+        bias_all = self.eigv.dot(np.log(1+x))
+        bias2 = 0.5 * self.eigv.dot(np.divide(obsvar, A**2 * flux**2))
+        return bias1, bias2, bias_all
+        
+    def eval_coeff_bias(self, pmt, snr=10, N_obs=10, plot=0, N_plot=None):
+        coeff = self.rbf_coeff(pmt)
+        obsfluxs, obsvar, bias, A = self.make_obs_from_pmt(pmt, snr, N=N_obs, onPCA = self.onPCA)
+        logobsflux = self.Obs.safe_log(obsfluxs)
+        COEFF = logobsflux.dot(self.eigv.T)
+        if snr !=np.inf: 
+            snr = self.Obs.get_avg_snr(obsfluxs, top = N_obs)
+        if plot: 
+            if N_plot is None: N_plot = self.topk // 2 -1
+            self.plot_eval_coeff_bias(COEFF, coeff, pmt, snr, N_plot = N_plot)
+        print(f"diff = {COEFF.mean(0) - coeff - bias[1]}")
+        print(f"diff_log(1+x) = {COEFF.mean(0) - coeff - bias[2]}")
+
+        return COEFF, coeff, bias, snr, obsfluxs.mean(0), obsvar,A
+
+
 
 #LLH --------------------------------------------------
 
@@ -183,18 +228,6 @@ class BoxWR(BaseBox):
         if plot:
             self.plot_eval_LLH(pmt, preds, pdxs, snr)
         return preds, snr
-
-    def eval_coeff_bias(self, pmt, snr=10, N_obs=10, plot=0, N_plot=None):
-        coeff = self.rbf_coeff(pmt)
-        obsfluxs, obsvar = self.make_obs_from_pmt(pmt, snr, N=N_obs)
-        logobsflux = self.Obs.safe_log(obsfluxs)
-        COEFF = logobsflux.dot(self.eigv.T)
-        if snr !=np.inf: 
-            snr = self.Obs.get_avg_snr(obsfluxs, top = N_obs)
-        if plot: 
-            if N_plot is None: N_plot = self.topk // 2 -1
-            self.plot_eval_coeff_bias(COEFF, coeff, pmt, snr, N_plot = N_plot)
-        return COEFF, coeff, snr
 
 
     def plot_eval_coeff_bias(self, pred, truth, pmt, snr, N_plot, n_box=0.5):
@@ -222,7 +255,7 @@ class BoxWR(BaseBox):
         fns = []
         SNRs= []
         for pmt in tqdm(pmts):
-            COEFF, coeff, SNR = self.eval_coeff_bias(pmt, snr=snr, N_obs=N_obs, plot=0, N_plot=N_plot)
+            COEFF, coeff, bias, SNR = self.eval_coeff_bias(pmt, snr=snr, N_obs=N_obs, plot=0, N_plot=N_plot)
             fns_pmt = self.PLT.flow_fn_i(COEFF, coeff, legend=0)
             fns = fns + fns_pmt
             SNRs.append(SNR)
@@ -245,7 +278,7 @@ class BoxWR(BaseBox):
             SNRs_snr= []
             axs = axss[ii]
             for pmt in tqdm(pmts):
-                COEFF, coeff, SNR = self.eval_coeff_bias(pmt, snr=snr, N_obs=N_obs, plot=0, N_plot=N_plot)
+                COEFF, coeff, bias, SNR = self.eval_coeff_bias(pmt, snr=snr, N_obs=N_obs, plot=0, N_plot=N_plot)
                 fns_pmt = self.PLT.flow_fn_i(COEFF, coeff, legend=0)
                 fns_snr = fns_snr + fns_pmt
                 SNRs_snr.append(SNR)
@@ -257,7 +290,7 @@ class BoxWR(BaseBox):
         name = self.Obs.get_pmt_name(*pmt)
         fig.suptitle(f'{name}')
         fig.tight_layout()
-        return fns, SNRs
+        return fns, SNRs, pmts
 
     def plot_coeff_cdx(self, coeff, COEFF, cdx1, cdx2, ax=None):
         if ax is None: fig, ax = plt.subplots(1,1)

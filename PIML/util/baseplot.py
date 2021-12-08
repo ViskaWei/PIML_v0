@@ -35,8 +35,9 @@ class BasePlot(object):
             ax.set_xlabel(lbl[ii])            
             ax.set_ylabel(lbl[jj])   
 
-    def plotN(self, fns=[], data=None, N_plot=1, lbl="idx", ann=None, axs=None):
+    def plotN(self, fns=[], data=None, N_plot=1, lbl="idx", ann=None, axs=None, outf=False):
         if axs is None:
+            outf = True
             f, axs = plt.subplots(1,N_plot, figsize=(N_plot*3,3), facecolor="w")
         for ii, ax in enumerate(axs):
             idx1, idx2 = 2 * ii, 2 * ii + 1
@@ -47,7 +48,7 @@ class BasePlot(object):
                 fn(idx1,idx2,ax,[])            
             ax.set_xlabel(f"{lbl}{idx1}")            
             ax.set_ylabel(f"{lbl}{idx2}") 
-        return None
+        if outf: return f
 
     @staticmethod
     def set_unique_legend(ax):

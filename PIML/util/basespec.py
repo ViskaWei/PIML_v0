@@ -128,6 +128,23 @@ class BaseSpec(Util):
         else:
             b = list(range(1,wave_grid.shape[0],step))
             sky_new = np.diff(f(wave_grid[b]))
+        # sky_new = sky_new / step
+        # assert sky_new.shape == wave_grid.shape
+        return sky_new
+
+    
+    @staticmethod
+    def resampleSky0(sky, wave_grid, step=5):
+        ws = sky[:,0]
+        cs = np.cumsum(sky[:,1])
+        f = sp.interpolate.interp1d(ws,cs, fill_value=0)
+        if step==0: 
+            sky_new = np.diff(f(wave_grid))
+            sky_new = np.insert(sky_new, 0, f(wave_grid[0]))
+        else:
+            b = list(range(1,wave_grid.shape[0],step))
+            sky_new = np.diff(f(wave_grid[b]))
+        # sky_new = sky_new / step
         # assert sky_new.shape == wave_grid.shape
         return sky_new
 
