@@ -28,6 +28,7 @@ class BoxWR(BaseBox):
         np.random.seed(1015)
 
 
+
 # init------------------------------------------------------------------------
 
     def init_R(self, R):
@@ -55,7 +56,8 @@ class BoxWR(BaseBox):
         wave_H, flux_H, self.pdx, self.para = self.IO.load_bosz(Res, RR=self.RR)
         self.pdx0 = self.pdx - self.pdx[0]
         self.wave_H, flux_H = self.get_flux_in_Wrange(wave_H, flux_H)
-        self.flux_H = flux_H[0]
+        self.flux_H = flux_H
+        self.flux_H0 = self.flux_H[0]
 
         self.wave, self.flux = self.downsample(flux_H)
         self.flux_M = self.flux[0]

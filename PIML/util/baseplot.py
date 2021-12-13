@@ -244,7 +244,8 @@ class BasePlot(object):
         for ratio in chis:
             add_e(ratio, ax=ax)
         # ax.set_xlabel("x")
-        # ax.set_ylabel("y")
+        # ax.set_ylabel("flux")
+
         # ax.set_title("Correlated data")
         ax.legend()
 

@@ -8,23 +8,32 @@ class Obs(BaseSpec):
     def __init__(self):
         self.DATADIR = '/home/swei20/LV/data/fisher/'
         self.sky = None
-        self.noise_level_grid = [2,5,10,20,30,40,50,100,200,500,1000]
+        self.noise_level_grid = [2,5,10,20,30,40,50,100,200,500,800]
         # self.snrList = [11,22,33,55,110]
-        self.snrList = [10, 20, 30, 50, 100]
+        self.snrList = [10, 20, 30, 50]
         self.nlList = None
         self.LLH = LLH()
         self.snr2nl = None
+        self.sky_fn = None
 
 
 
     def load_sky_H(self):
         sky = np.genfromtxt(self.DATADIR +'skybg_50_10.csv', delimiter=',')
         sky[:, 0] = 10 * sky[:, 0]
+        self.sky_fn = Obs.interp_sky_fn(sky)
         return sky
 
+    def init_sky_grid(self, wave_H):
+        _ = self.load_sky_H()
+        sky_grid = np.diff(self.sky_fn(wave_H))
+        sky_grid = np.insert(sky_grid, 0, self.sky_fn(wave_H[0]))
+        return sky_grid
+
+
     def prepare_sky(self, wave, flux_in_res, step):
-        sky_H = self.load_sky_H()
-        self.sky_in_res = Obs.resampleSky(sky_H, wave, step)
+        sky_H = self.init_sky_grid(wave)
+        self.sky_in_res = Obs.resampleSky(self.sky_fn, wave, step)
         self.snr2nl = self.get_snr2nl_fn(flux_in_res)
         self.nlList = self.snr2nl(self.snrList)
 

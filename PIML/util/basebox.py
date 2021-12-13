@@ -84,6 +84,10 @@ class BaseBox(Constants):
 
         return dfpara[mask].index
 
+    # def load_dfpara(self):
+    #     dfpara = IO.read_dfpara()
+    #     return dfpara
+
     @staticmethod
     def get_bdx(dfpara=None, para=None):
         if dfpara is None: 

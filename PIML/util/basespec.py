@@ -82,7 +82,7 @@ class BaseSpec(Util):
 # resample ------------------------------------------------------------------------------
 
     @staticmethod
-    def resampleWave(wave,step=5, verbose=1):
+    def resampleWave(wave, step=5, verbose=1):
         if step==0:
             wave1 = wave
         else:
@@ -90,7 +90,7 @@ class BaseSpec(Util):
             # resample the wavelengths by a factor step
             #-----------------------------------------------------
             w = np.cumsum(np.log(wave))
-            b = list(range(1,wave.shape[0],step))
+            b = list(range(1, len(wave), step))
             db = np.diff(w[b])
             dd = (db/step)
             wave1 = np.exp(dd) 
@@ -104,7 +104,7 @@ class BaseSpec(Util):
         # resample the spectrum by a factor step
         #-----------------------------------------------------
         c = np.cumsum(flux)
-        b = list(range(1,flux.shape[0],step))
+        b = list(range(1, len(flux), step))
         db = np.diff(c[b])
         dd = (db/step)
         return dd
@@ -118,35 +118,34 @@ class BaseSpec(Util):
         return out
 
     @staticmethod
-    def resampleSky(sky, wave_grid, step=5):
-        ws = sky[:,0]
-        cs = np.cumsum(sky[:,1])
-        f = sp.interpolate.interp1d(ws,cs, fill_value=0)
+    def resampleSky(f, wave_grid, step=5, avg=0):
         if step==0: 
             sky_new = np.diff(f(wave_grid))
             sky_new = np.insert(sky_new, 0, f(wave_grid[0]))
         else:
             b = list(range(1,wave_grid.shape[0],step))
             sky_new = np.diff(f(wave_grid[b]))
-        # sky_new = sky_new / step
+        if avg:
+            sky_new = sky_new / step
         # assert sky_new.shape == wave_grid.shape
         return sky_new
 
-    
     @staticmethod
-    def resampleSky0(sky, wave_grid, step=5):
+    def resample_sky(sky_H, wave_M, step=5, avg=0):
+        sky_cumsum = np.cumsum(sky_H)
+        b = list(range(1, wave_M, step))
+        sky_new = np.diff(sky_cumsum[b])
+        if avg:
+            sky_new = sky_new / step
+        # assert sky_new.shape == wave_grid.shape
+        return sky_new
+
+    @staticmethod
+    def interp_sky_fn(sky):
         ws = sky[:,0]
         cs = np.cumsum(sky[:,1])
         f = sp.interpolate.interp1d(ws,cs, fill_value=0)
-        if step==0: 
-            sky_new = np.diff(f(wave_grid))
-            sky_new = np.insert(sky_new, 0, f(wave_grid[0]))
-        else:
-            b = list(range(1,wave_grid.shape[0],step))
-            sky_new = np.diff(f(wave_grid[b]))
-        # sky_new = sky_new / step
-        # assert sky_new.shape == wave_grid.shape
-        return sky_new
+        return f
 
     @staticmethod
     def resample(wave, fluxs, step=10, verbose=1):
