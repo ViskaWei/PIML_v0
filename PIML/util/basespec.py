@@ -135,9 +135,7 @@ class BaseSpec(Util):
         sky_cumsum = np.cumsum(sky_H)
         b = list(range(1, wave_M, step))
         sky_new = np.diff(sky_cumsum[b])
-        if avg:
-            sky_new = sky_new / step
-        # assert sky_new.shape == wave_grid.shape
+        sky_new = sky_new / step
         return sky_new
 
     @staticmethod
