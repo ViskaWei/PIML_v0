@@ -56,11 +56,11 @@ class BoxWR(BaseBox):
         wave_H, flux_H, self.pdx, self.para = self.IO.load_bosz(Res, RR=self.RR)
         self.pdx0 = self.pdx - self.pdx[0]
         self.wave_H, flux_H = self.get_flux_in_Wrange(wave_H, flux_H)
-        self.flux_H = flux_H
-        self.flux_H0 = self.flux_H[0]
+        # self.flux_H = flux_H
+        self.Mdx = self.Obs.get_fdx_from_pmt(self.PhyMid, self.para)
+        self.fluxH0 = flux_H[self.Mdx]
 
         self.wave, self.flux = self.downsample(flux_H)
-        self.flux_M = self.flux[0]
         self.flux0 = self.get_model(self.PhyMid, onGrid=1, plot=1)
         self.init_sky(self.wave_H, self.flux0, step)
 
@@ -93,10 +93,11 @@ class BoxWR(BaseBox):
     def run_step_rbf(self, logflux, onPCA=1):
         if onPCA:
             mu, pcflux = self.run_step_pca(logflux, top=self.topk)
-            interp_fn = self.build_PC_rbf(mu, pcflux)
+            interp_obs_fn, interp_model_fn = self.build_PC_rbf(mu, pcflux)
+            return interp_obs_fn, interp_model_fn
         else:
             interp_fn = self.build_logflux_rbf(logflux)
-        return interp_fn
+            return interp_fn, interp_fn
 
     def build_logflux_rbf(self, logflux):
         rbf_interp = self.RBF.train_rbf(self.pdx0, logflux)
@@ -137,7 +138,7 @@ class BoxWR(BaseBox):
             s = s[:top]
             v = v[:top]
             self.topk = top
-        print(s[:10].round(2))
+        print("Top10 eigs", s[:10].round(2))
         assert abs(np.mean(np.sum(v.dot(v.T), axis=0)) -1) < 1e-5
         assert abs(np.sum(v, axis=1).mean()) < 0.1
         self.eigv = v
@@ -168,27 +169,102 @@ class BoxWR(BaseBox):
         return flux
     
 
-    def make_obs_from_pmt(self, pmt, snr, N=1, plot=0, onPCA=0, onGrid=1):
-        if snr == np.inf: 
-            noise_level = 0
-        else:
-            noise_level = self.Obs.snr2nl(snr)
+    def make_obs_from_pmt(self, pmt, noise_level=None, snr=None, N=1, plot=0, onPCA=0, onGrid=1):
+        if noise_level is None:
+            if snr == np.inf: 
+                noise_level = 0
+            else:
+                noise_level = self.Obs.snr2nl(snr)
         flux = self.get_model(pmt, norm=0, onGrid=0)
-        np.random.seed(1015)
-        obsfluxs, obsvar = self.Obs.add_obs_to_flux_N(flux, noise_level, N)
+        # np.random.seed(1015)
+        obsfluxs, obsvar = self.Obs.add_obs_to_flux_N(flux, noise_level, self.step, N)
         if plot: self.Obs.plot_noisy_spec(self.wave, flux, obsfluxs[0], pmt)
-        if onPCA:
-            normflux = self.get_model(pmt, norm=1)
-            A = np.exp(self.rbf_mu(pmt))
-            A0 = obsfluxs.mean(1).mean() / normflux.mean() 
-            print(f"A = {A}, dA = {A-A0}")
-            bias = self.get_bias(normflux, obsvar, A=A)
-            # print(normflux - flux)
-            if N == 1: obsfluxs = obsfluxs[0]
-            return obsfluxs, obsvar, bias, A
+        # if onPCA:
+        #     normflux = self.get_model(pmt, norm=1)
+        #     A = np.exp(self.rbf_mu(pmt))
+        #     A0 = obsfluxs.mean(1).mean() / normflux.mean() 
+        #     print(f"A = {A}, dA = {A-A0}")
+        #     bias = self.get_bias(normflux, obsvar, A=A)
+            
+        #     # print(normflux - flux)
+        #     if N == 1: obsfluxs = obsfluxs[0]
+        #     return obsfluxs.mean(0), obsvar, bias, A
         else:
             if N == 1: obsfluxs = obsfluxs[0]
             return obsfluxs, obsvar
+
+    def eval_pca_bias(self, pmt, N, noise_level=None, snr=None):
+        if (noise_level is None) & (snr is None): 
+            raise "noise level or snr not specified"
+        obsfluxs, obsvar,= self.make_obs_from_pmt(pmt, noise_level=noise_level,snr=snr, N=N, onPCA=1, plot=0)
+        bk = np.log(obsfluxs).dot(self.eigv.T).mean(0)
+        ak = self.rbf_coeff(pmt)
+        mp = self.get_model(pmt, norm=1)
+        A = np.exp(self.rbf_mu(pmt))
+        Amp = A * mp
+        x =  obsvar ** 0.5 / Amp
+
+        bias_all = self.eigv.dot(self.Obs.safe_log(1 + x))
+        bias_1st_order = self.eigv.dot(x)
+        bias_2nd_order = 1/2 * self.eigv.dot(obsvar / Amp**2)
+        
+        return bk - ak, (bias_all, bias_1st_order, bias_2nd_order)
+
+    def plot_theory_bias(self, bias, NL=None, ax=None, pmt=None, log=1):
+        if ax is None: 
+            f, ax = plt.subplots(1, figsize=(6,4), facecolor="w")
+        b0, b1, b2 = bias
+        b0 = abs(b0)
+        b1 = abs(b1)
+        b2 = abs(b2)
+        ax.plot(b0, b0, 'ko', label="$\sum_p \log(1+x) V_p$")
+        ax.plot(b0, b1, 'rx', label = "$\sum_p x V_p$")
+        # ax.plot(b0, b2, 'bo', label = "$x^2$/2")
+        if NL is not None: 
+            NL05 = NL**0.5
+            offset1 =  b0[0] * (1-NL05)
+            # offset2 = b2[0] - b0[0]*NL 
+            # line =np.array([[b0[0], b0[0]], [b0[-1], b0[-1] * NL05 + offset1 ]])
+            # ax.plot(((b0[0], b0[-1]), (b0[0], b0[-1] * NL05 + offset1)),  label=r"$\sqrt{NL}$=" + f"{NL05:.0f}", c="r")
+            print(b0[0])
+            ax.plot([b0[0],b0[-1]], [b0[0], b0[-1]*NL05 + offset1], 'go')
+            # ax.plot(b0, b0 * NL05 + offset1, label=r"$\sqrt{NL}$=" + f"{NL05:.0f}", c="r")
+            # ax.plot(b0, b0 * NL + offset2, label=f"NL={NL}", c="g")
+        if log:
+            ax.set_xscale("log")
+            ax.set_yscale("log")
+        ax.set_xlabel("Theory Bias log(1+x)")
+        if pmt is None: pmt = self.PhyMid
+        title = self.RR + " " + self.Obs.get_pmt_name(*pmt)
+        ax.set_title(title)
+        ax.legend()
+    
+    def plot_exp_bias(self, ak, diffs, labels=None, ax=None, pmt=None):
+        
+        if ax is None: 
+            f, ax = plt.subplots(1, figsize=(6,4), facecolor="w")
+        ak0 = abs(ak)
+        for ii, diff in enumerate(diffs):
+            d0 = abs(diff) 
+            ax.plot(ak0, d0 / ak0, 'o', label=labels[ii])
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_xlabel("|$a_k$|")
+        ax.set_ylabel("| $b_k$ / $a_k$ - 1|")
+        if pmt is None: pmt = self.PhyMid
+        title = self.RR + " " + self.Obs.get_pmt_name(*pmt)
+        ax.set_title(title)
+        ax.legend()
+
+    def plot_bias_evals(self, diffs, bias, pmt=None, diff_labels=None):
+        if pmt is None: pmt = self.PhyMid
+        f, axs = plt.subplots(1,2, figsize=(12,4), facecolor="w")
+        self.plot_theory_bias(bias, ax=axs[0])
+        ak = self.rbf_coeff(pmt)
+        self.plot_exp_bias(ak, diffs, labels=diff_labels, ax=axs[1])
+
+
+
 
     def get_bias(self, flux, obsvar, A=1):
         x = np.divide(obsvar**0.5, A * flux)
