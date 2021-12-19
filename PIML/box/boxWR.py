@@ -203,29 +203,46 @@ class BoxWR(BaseBox):
         A = np.exp(self.rbf_mu(pmt))
         Amp = A * mp
         x =  obsvar ** 0.5 / Amp
-        bias_all = self.eigv.dot(np.log(1 + x))
+
+        bias_all = self.eigv.dot(self.Obs.safe_log(1 + x))
         bias_1st_order = self.eigv.dot(x)
         bias_2nd_order = 1/2 * self.eigv.dot(obsvar / Amp**2)
         
         return bk - ak, (bias_all, bias_1st_order, bias_2nd_order)
 
-    def plot_theory_bias(self, bias, ax=None, title=None):
+    def plot_theory_bias(self, bias, NL=None, ax=None, pmt=None, log=1):
         if ax is None: 
-            f, ax = plt.subplots(1, figsize=(6,4))
+            f, ax = plt.subplots(1, figsize=(6,4), facecolor="w")
         b0, b1, b2 = bias
-        ax.plot(b0, b0, 'ko', label="log(1+x)")
-        ax.plot(b0, b1, 'rx', label = "x")
-        ax.plot(b0, b2, 'bo', label = "$x^2$/2")
-        ax.set_xscale("log")
-        ax.set_yscale("log")
-        ax.set_xlabel("log(1+x)")
-        if title is not None: ax.set_title(title)
+        b0 = abs(b0)
+        b1 = abs(b1)
+        b2 = abs(b2)
+        ax.plot(b0, b0, 'ko', label="$\sum_p \log(1+x) V_p$")
+        ax.plot(b0, b1, 'rx', label = "$\sum_p x V_p$")
+        # ax.plot(b0, b2, 'bo', label = "$x^2$/2")
+        if NL is not None: 
+            NL05 = NL**0.5
+            offset1 =  b0[0] * (1-NL05)
+            # offset2 = b2[0] - b0[0]*NL 
+            # line =np.array([[b0[0], b0[0]], [b0[-1], b0[-1] * NL05 + offset1 ]])
+            # ax.plot(((b0[0], b0[-1]), (b0[0], b0[-1] * NL05 + offset1)),  label=r"$\sqrt{NL}$=" + f"{NL05:.0f}", c="r")
+            print(b0[0])
+            ax.plot([b0[0],b0[-1]], [b0[0], b0[-1]*NL05 + offset1], 'go')
+            # ax.plot(b0, b0 * NL05 + offset1, label=r"$\sqrt{NL}$=" + f"{NL05:.0f}", c="r")
+            # ax.plot(b0, b0 * NL + offset2, label=f"NL={NL}", c="g")
+        if log:
+            ax.set_xscale("log")
+            ax.set_yscale("log")
+        ax.set_xlabel("Theory Bias log(1+x)")
+        if pmt is None: pmt = self.PhyMid
+        title = self.RR + " " + self.Obs.get_pmt_name(*pmt)
+        ax.set_title(title)
         ax.legend()
     
-    def plot_exp_bias(self, ak, diffs, labels=None, ax=None, title=None):
+    def plot_exp_bias(self, ak, diffs, labels=None, ax=None, pmt=None):
         
         if ax is None: 
-            f, ax = plt.subplots(1, figsize=(6,4))
+            f, ax = plt.subplots(1, figsize=(6,4), facecolor="w")
         ak0 = abs(ak)
         for ii, diff in enumerate(diffs):
             d0 = abs(diff) 
@@ -233,9 +250,18 @@ class BoxWR(BaseBox):
         ax.set_xscale("log")
         ax.set_yscale("log")
         ax.set_xlabel("|$a_k$|")
-        if title is not None: ax.set_title(title)
+        ax.set_ylabel("| $b_k$ / $a_k$ - 1|")
+        if pmt is None: pmt = self.PhyMid
+        title = self.RR + " " + self.Obs.get_pmt_name(*pmt)
+        ax.set_title(title)
         ax.legend()
 
+    def plot_bias_evals(self, diffs, bias, pmt=None, diff_labels=None):
+        if pmt is None: pmt = self.PhyMid
+        f, axs = plt.subplots(1,2, figsize=(12,4), facecolor="w")
+        self.plot_theory_bias(bias, ax=axs[0])
+        ak = self.rbf_coeff(pmt)
+        self.plot_exp_bias(ak, diffs, labels=diff_labels, ax=axs[1])
 
 
 
