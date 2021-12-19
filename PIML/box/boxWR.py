@@ -64,6 +64,8 @@ class BoxWR(BaseBox):
         self.flux0 = self.get_model(self.PhyMid, onGrid=1, plot=1)
         self.init_sky(self.wave_H, self.flux0, step)
 
+
+
         self.logflux = self.Obs.safe_log(self.flux)
         self.interp_obs, self.interp_model = self.run_step_rbf(self.logflux, onPCA=onPCA)
         self.init_LLH()
@@ -193,6 +195,11 @@ class BoxWR(BaseBox):
             if N == 1: obsfluxs = obsfluxs[0]
             return obsfluxs, obsvar
 
+    def estimate_snr(self, NL):
+        obsfluxH0, ovH = self.Obs.add_obs_to_flux(self.fluxH0, NL, step=0)
+        snr = self.Obs.get_snr(obsfluxH0) / 2**0.5
+        return snr
+
     def eval_pca_bias(self, pmt, N, noise_level=None, snr=None):
         if (noise_level is None) & (snr is None): 
             raise "noise level or snr not specified"
@@ -202,24 +209,25 @@ class BoxWR(BaseBox):
         mp = self.get_model(pmt, norm=1)
         A = np.exp(self.rbf_mu(pmt))
         Amp = A * mp
+        nu = obsfluxs.mean(0) - Amp
         x =  obsvar ** 0.5 / Amp
 
         bias_all = self.eigv.dot(self.Obs.safe_log(1 + x))
         bias_1st_order = self.eigv.dot(x)
         bias_2nd_order = 1/2 * self.eigv.dot(obsvar / Amp**2)
         
-        return bk - ak, (bias_all, bias_1st_order, bias_2nd_order)
+        return bk - ak, (bias_all, bias_1st_order, bias_2nd_order), nu, x
 
     def plot_theory_bias(self, bias, NL=None, ax=None, pmt=None, log=1):
         if ax is None: 
             f, ax = plt.subplots(1, figsize=(6,4), facecolor="w")
         b0, b1, b2 = bias
-        b0 = abs(b0)
-        b1 = abs(b1)
-        b2 = abs(b2)
+        b0 = abs(b0[1:])
+        b1 = abs(b1[1:])
+        b2 = abs(b2[1:])
         ax.plot(b0, b0, 'ko', label="$\sum_p \log(1+x) V_p$")
         ax.plot(b0, b1, 'rx', label = "$\sum_p x V_p$")
-        # ax.plot(b0, b2, 'bo', label = "$x^2$/2")
+        ax.plot(b0, b2, 'bo', label = "$x^2$/2")
         if NL is not None: 
             NL05 = NL**0.5
             offset1 =  b0[0] * (1-NL05)
@@ -238,6 +246,7 @@ class BoxWR(BaseBox):
         title = self.RR + " " + self.Obs.get_pmt_name(*pmt)
         ax.set_title(title)
         ax.legend()
+        return b0
     
     def plot_exp_bias(self, ak, diffs, labels=None, ax=None, pmt=None):
         
