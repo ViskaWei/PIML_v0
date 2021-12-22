@@ -216,7 +216,7 @@ class BoxWR(BaseBox):
         bias_1st_order = self.eigv.dot(x)
         bias_2nd_order = 1/2 * self.eigv.dot(obsvar / Amp**2)
         
-        return bk - ak, (bias_all, bias_1st_order, bias_2nd_order), nu, x
+        return bk - ak, (bias_all, bias_1st_order, bias_2nd_order)
 
     def plot_theory_bias(self, bias, NL=None, ax=None, pmt=None, log=1):
         if ax is None: 
