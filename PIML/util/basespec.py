@@ -138,12 +138,7 @@ class BaseSpec(Util):
         sky_new = sky_new / step
         return sky_new
 
-    @staticmethod
-    def interp_sky_fn(sky):
-        ws = sky[:,0]
-        cs = np.cumsum(sky[:,1])
-        f = sp.interpolate.interp1d(ws,cs, fill_value=0)
-        return f
+
 
     @staticmethod
     def resample(wave, fluxs, step=10, verbose=1):

@@ -48,7 +48,7 @@ class Constants():
         LASZLO_PFSSPEC_DIR = "/datascope/subaru/data/pfsspec/"
         PARA_PATH = "/datascope/subaru/user/swei20/data/pfsspec/import/stellar/grid/para.csv"
         SKY_PATH = "/home/swei20/LV/data/fisher/skybg_50_10.csv"
-
+        DATA_PATH = "/home/swei20/PhysicsInformedML/data/"
 
 
 
