@@ -5,11 +5,6 @@ from .IO import IO
 
 class BaseBox(Constants):
     """ Box Constants """
-    def __init__(self):
-        super().__init__()
-        self.IO = IO()
-
-
     DRs =  {"M": [[-2.5, 0.0], [3500, 5000], [0.0, 1.5],[-0.75, 0.5], [-0.25, 0.5]], 
             "W": [[-2.0, 0.0], [5500, 7500], [3.5, 5.0],[-0.75, 0.5], [-0.25, 0.5]],
             "C": [[-2.0, 0.0], [3750, 5500], [3.5, 5.0],[-0.75, 0.5], [-0.25, 0.5]], 
@@ -21,6 +16,11 @@ class BaseBox(Constants):
 
     Rnms = list(DRR.keys())
     RRnms = list(DRR.values())
+
+    def __init__(self):
+        super().__init__()
+        self.IO = IO()
+
 
     def init_bnds(self):
         self.DPhyMin = {}
@@ -36,6 +36,23 @@ class BaseBox(Constants):
             self.DPhyNum[R] = PhyNum
             self.DPhyMid[R] = PhyMid
 
+    def init_R(self, R):
+        self.R = R
+        self.RR = BaseBox.DRR[R]
+        self.PhyMin, self.PhyMax, self.PhyRng, self.PhyNum, self.PhyMid = self.get_bnd(R)
+        self.minmax_scaler, self.minmax_rescaler = BaseBox.get_minmax_scaler_fns(self.PhyMin, self.PhyRng)
+        self.pmt2pdx_scaler, _ = BaseBox.get_pdx_scaler_fns(self.PhyMin)
+
+    def init_W(self, W):
+        self.W = W
+        self.Ws = BaseBox.DWs[W]
+
+    def init_WR(self, W, R):
+        self.init_W(W)
+        self.init_R(R)
+
+
+
     @staticmethod
     def init_para(para):
         return pd.DataFrame(para, columns=Constants.PhyShort)
@@ -50,7 +67,7 @@ class BaseBox(Constants):
         return PhyMin, PhyMax, PhyRng, PhyNum, PhyMid
 
     @staticmethod
-    def get_scaler_fns(PhyMin, PhyRng):
+    def get_minmax_scaler_fns(PhyMin, PhyRng):
         def scaler_fn(x):
             return (x - PhyMin) / PhyRng
         def inverse_scaler_fn(x):
@@ -137,4 +154,8 @@ class BaseBox(Constants):
         if save: IO.save_bosz_box(Res, RR, wave, boxFlux, boxPdx, boxPara, overwrite=1)
         return boxFlux, boxPdx, boxPara
 
-
+    @staticmethod
+    def get_random_pmt(PhyRng, PhyMin, N_pmt):
+        pmt0 = np.random.uniform(0,1,(N_pmt,5))
+        pmts = pmt0 * PhyRng + PhyMin   
+        return pmts

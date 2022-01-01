@@ -2,6 +2,7 @@ import numpy as np
 import scipy as sp
 
 from .util import Util
+
 class BaseSpec(Util):
     """
     Base class for all specifications.

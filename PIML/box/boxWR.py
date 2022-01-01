@@ -27,29 +27,16 @@ class BoxWR(BaseBox):
         self.LLH = LLH()
         self.PLT = BasePlot()
         self.topk = None
-        np.random.seed(1015)
 
 
 
 # init------------------------------------------------------------------------
 
-    def init_R(self, R):
-        self.R = R
-        self.RR = BaseBox.DRR[R]
-        self.PhyMin, self.PhyMax, self.PhyRng, self.PhyNum, self.PhyMid = self.get_bnd(R)
-        self.scaler, self.rescaler = BaseBox.get_scaler_fns(self.PhyMin, self.PhyRng)
-        self.pmt2pdx_scaler, _ = BaseBox.get_pdx_scaler_fns(self.PhyMin)
-
-    def init_W(self, W):
-        self.W = W
-        self.Ws = Obs.init_W(self.W)
-
     def get_flux_in_Wrange(self, wave, flux):
         return Obs._get_flux_in_Wrange(wave, flux, self.Ws)
 
     def init(self, W, R, Res, step, topk=10, onPCA=1):
-        self.init_W(W)
-        self.init_R(R)
+        self.init_WR(W, R)
         self.init_plot()
         self.Res = Res
         self.step = step
@@ -199,11 +186,45 @@ class BoxWR(BaseBox):
             if plot: self.Obs.plot_spec(self.wave, Amodel, pmt=pmt)
             return Amodel
     
-    def get_bk(self, pmt, noise_level):
+    def get_bk_fn_from_pmt(self, pmt, noise_level):
         ak = self.rbf_ak(pmt)
-        stdmag = 
+        stdmag = self.interp_stdmag_fn(pmt, noise_level)
+        def add_bias(X=None):
+            bias = self.interp_bias_fn(stdmag, X)
+            return ak + bias
+        return add_bias
 
-        bias = self.interp_bias_fn(model)
+    def get_bk_fns(self, noise_level, pmts=None, N_pmts=1, out_bks=1):
+        if pmts is None: 
+            pmts = self.get_random_pmt(N_pmts)
+        if out_bks:
+            bks = np.zeros((pmts.shape[0], self.topk))
+        bk_fns = []
+        for ii, pmt in enumerate(pmts):
+            bk_fn = self.get_bk_fn_from_pmt(pmt, noise_level)
+            bk_fns.append(bk_fn)
+            if out_bks:
+                bks[ii] = bk_fn()            
+        if out_bks:
+            return bk_fns, bks
+        else:
+            return bk_fns
+        
+    def get_bks(self, bk_fns):
+        bks = np.zeros((len(bk_fns), self.topk))
+        for ii, bk_fn in enumerate(bk_fns):
+            bks[ii] = bk_fn()
+        return bks
+
+    def get_bks_N_obs_from_pmt(self, pmt=None, noise_level=1, N_obs=1):
+        if pmt is None: pmt = self.get_random_pmt(1)[0]
+        bk_fn = self.get_bk_fn_from_pmt(pmt, noise_level)
+        bk_N_obs = np.zeros((N_obs, self.topk))
+        for ii in range(N_obs):
+            bk_N_obs[ii] = bk_fn()
+        return bk_N_obs
+        
+
 
     def make_obs_from_pmt(self, pmt, noise_level=None, snr=None, N=1, plot=0, onPCA=0, onGrid=1):
         if noise_level is None:
@@ -279,8 +300,8 @@ class BoxWR(BaseBox):
         b2 = abs(b2)
         Nname = f"N={N}" if N is not None else ""
         if theory:
-            labels =   ["$\sum_p \log(1+ \sigma_p / A m_p) \cdot V_p$",  
-                        "$\sum_p (\sigma_p/ A m_p)  \cdot  V_p$", 
+            labels =   ["$|\sum_p \log(1+ \sigma_p / A m_p) \cdot V_p|$",  
+                        "$|\sum_p (\sigma_p/ A m_p)  \cdot  V_p|$", 
                         "$\sum_p 1/2 \cdot (\sigma_p / A m_p)^2 \cdot V_p$",
                         "Theory $|a_k|$ "+Nname]
         else:
@@ -389,19 +410,20 @@ class BoxWR(BaseBox):
 #LLH --------------------------------------------------
 
 
-    def eval_LLH_at_pmt(self, pmt, pdxs=[1], snr=10, N_obs=10, plot=0):
-        obsfluxs , obsvar = self.make_obs_from_pmt(pmt, snr, N=N_obs)
-        if snr !=np.inf: 
-            snr = self.Obs.get_avg_snr(obsfluxs, top = N_obs)
-        fns = self.LLH.get_eval_LLH_fns(pdxs, pmt, obsvar)
+    def eval_LLH_at_pmt(self, pmt, odxs=[1], noise_level=100, N_obs=10, plot=0):
+        obsfluxs , obsvar = self.make_obs_from_pmt(pmt, noise_level=noise_level, N=N_obs)
+        # if snr !=np.inf: 
+        #     snr = self.Obs.get_avg_snr(obsfluxs, top = N_obs)
+        fns = self.LLH.get_eval_LLH_fns(odxs, pmt, obsvar)
         preds = []
         for fn_pdx, fn in fns.items():
             pred_x = self.LLH.collect_estimation(fn, obsfluxs, fn_pdx, x0=self.PhyMid)
             preds.append(pred_x)
         preds = np.array(preds).T
         if plot:
-            self.plot_eval_LLH(pmt, preds, pdxs, snr)
-        return preds, snr
+            snr = self.estimate_snr(noise_level)
+            self.plot_eval_LLH(pmt, preds, odxs, snr)
+        return preds
 
 
     def plot_eval_ak_bias(self, pred, truth, pmt, snr, N_plot, n_box=0.5):
@@ -478,18 +500,17 @@ class BoxWR(BaseBox):
         ax.set_ylabel(f"PC - a{cdx2}") 
 
 
-    def eval_LLH_snr(self, snr, pmts=None, pdxs=[0,1,2], N_pmt=10, N_obs=10, n_box=0.5):
-        if pmts is None: pmts = self.get_random_grid_pmt(N_pmt)
+    def eval_LLH_NL(self, noise_level=None, pmts=None, pdxs=[0,1,2], N_pmt=10, N_obs=10, n_box=0.5):
+        if pmts is None: pmts = self.get_random_pmt(N_pmt)
         fns = []
-        SNRs= []
         for pmt in tqdm(pmts):
-            preds_pmt, SNR = self.eval_LLH_at_pmt(pmt, pdxs, snr=snr, N_obs=N_obs, plot=0)
+            preds_pmt = self.eval_LLH_at_pmt(pmt, pdxs, noise_level=noise_level, N_obs=N_obs, plot=0)
             fns_pmt = self.PLT.flow_fn_i(preds_pmt, pmt[pdxs], legend=0)
             fns = fns + fns_pmt
-            SNRs.append(SNR)
 
         f = self.PLT.plot_box(pdxs, fns = fns, n_box=n_box)
-        f.suptitle(f"SNR={SNR.mean():.2f}")
+        snr = self.estimate_snr(noise_level)
+        f.suptitle(f"SNR={snr:.2f}")
 
     def eval_LLH(self, pmts=None, pdxs=[0,1,2], N_pmt=10, n_box=0.5, snrList=None):
         if snrList is None: snrList = self.Obs.snrList
@@ -506,6 +527,11 @@ class BoxWR(BaseBox):
         np.random.seed(42)
         idx = np.random.randint(0, len(self.para), N_pmt)
         pmts = self.para[idx]
+        return pmts
+
+    def get_random_pmt(self, N_pmt, nPara=5):
+        pmt0 = np.random.uniform(0,1,(N_pmt,nPara))
+        pmts = self.minmax_rescaler(pmt0)
         return pmts
 
     def plot_ak_on_pmt(self, fn, topk=10, axis="T", fn_name=""):
