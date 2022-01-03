@@ -120,3 +120,26 @@ class IO():
     def save_bosz_box(Res, RR, wave, flux, pdx, para, overwrite=0):
         SAVE_PATH = os.path.join(Constants.GRID_DIR, f"bosz_{Res}_{RR}.h5")
         IO.save(wave, flux, pdx, para, SAVE_PATH, overwrite)
+
+
+    # def save_ak(self, pmt=None, SAVE_PATH=None):
+    #     if pmt is None: pmt = self.PhyMid
+    #     if SAVE_PATH is None: SAVE_PATH = os.path.join(self.Obs.DATA_PATH, "ak.h5")
+    #     ak= self.rbf_ak(pmt)
+    #     with h5py.File(SAVE_PATH, "a") as f:
+    #         f.create_dataset(self.R, data=ak, shape=ak.shape)
+
+    # def load_ak(self, pmt=None, LOAD_PATH=None):
+    #     if LOAD_PATH is None: LOAD_PATH = os.path.join(self.Obs.DATA_PATH, "ak.h5")
+    #     Dak = {}
+    #     with h5py.File(LOAD_PATH, "r") as f:
+    #         for key in f.keys():
+    #             Dak[key] = f[key][:]
+    #     return Dak
+
+    # def plot_Dak(self, Dak):
+    #     f, axs = plt.subplots(3,2, figsize=(16,12), facecolor="w")
+    #     axs = axs.flat
+    #     for ii, (key, val) in enumerate(Dak.items()):
+    #         axs[ii].plot(Dak[key], 'ro', label=key)
+    #         axs[ii].set_xlabel("$a_k$")
