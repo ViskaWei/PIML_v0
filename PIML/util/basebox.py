@@ -74,7 +74,7 @@ class BaseBox(Constants):
             return x * PhyRng + PhyMin        
         return scaler_fn, inverse_scaler_fn
 
-    
+    @staticmethod
     def get_pdx_scaler_fns(PhyMin):
         def scaler_fn(x):
             return np.divide((x - PhyMin) ,Constants.PhyTick)
