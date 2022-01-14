@@ -37,12 +37,12 @@ class dnnWR(BaseBox):
         self.PhyLong =  [dnnWR.PhyLong[odx_i] for odx_i in self.odx]
 
     
-    def init_dnn(self, lr=0.01, dp=0.0):
+    def init_dnn(self, lr=0.01, dp=0.0, mtype="DNN", noise_level=None):
         NN = BaseNN()
-        NN.set_model(type="DNN")
+        NN.set_model(type=mtype)
         NN.set_model_shape(self.nFtr, self.nOdx)
         NN.set_model_param(lr=lr, dp=dp, loss='mse', opt='adam', name='')
-        NN.model.build_model()
+        NN.build_model(noise_level=noise_level)
         self.dnn = NN.model
 
     def setup_scaler(self, PhyMin, PhyMax, PhyRng, odx=None):

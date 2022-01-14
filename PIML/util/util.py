@@ -1,6 +1,8 @@
 import numpy as np
 import scipy as sp
-from PIML.util.constants import Constants
+# from scipy.stats import qmc
+from .IO import IO
+from .constants import Constants
 
 
 
@@ -8,6 +10,10 @@ class Util(Constants):
     """
     Utility functions
     """
+    def __init__(self):
+        self.IO = IO()
+        
+
     @staticmethod
     def get_file_path(file_name):
         """
@@ -37,12 +43,29 @@ class Util(Constants):
             z = z.replace('p','m')
         return z
     
+#random sample-------------------------------------------------------
+    @staticmethod
+    def get_random_uniform(nPmt, nPara, scaler=None, method="halton"):
+        if method == "halton":            
+            # Using Halton sequence to generate more evenly spaced samples
+            # https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.qmc.Halton.html
+
+            sampler = sp.stats.qmc.Halton(d=nPara, scramble=False)
+            sample = sampler.random(n=nPmt)
+        else:
+            sample = np.random.uniform(0, 1, size=(nPmt, nPara))
+        if scaler is not None:
+            sample = scaler(sample)
+        return sample
+
     @staticmethod
     def get_random_grid_pmt(para, N_pmt):
         idx = np.random.randint(0, len(para), N_pmt)
         pmts = para[idx]
         return pmts
 
+
+#sampling----------------------------------------------------------------
     @staticmethod
     def get_snr(flux):
         #--------------------------------------------------
@@ -62,3 +85,7 @@ class Util(Constants):
     #     pmt0 = np.random.uniform(0,1,(N_pmt,5))
     #     pmts = pmt0 * self.bnds[:,0] + self.bnds[:,2]   # [0,1] -> [0,1]                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                734QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ
     #     return pmts
+
+    @staticmethod
+    def safe_log(x):
+        return np.log(np.where(x <= 1, 1, x))

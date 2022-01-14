@@ -38,6 +38,7 @@ class DNN(object):
         self.model = None
         self.reg1 = None
         self.dp = None
+        self.callbacks=[]
 
     def set_model_shape(self, input_dim, output_dim, hidden_dims=[]):
         self.input_dim = input_dim
@@ -55,14 +56,18 @@ class DNN(object):
         self.loss = loss
         # self.name = self.get_name(name)
         # self.log_dir = "logs/fit/" + self.name        
-        self.callbacks = [
+        self.callbacks.append([
             EarlyStopping(monitor='loss', patience=10),
             ReduceLROnPlateau('loss',patience=10, min_lr=0., factor=0.1),
             # TensorBoard(log_dir=self.log_dir)
             # TensorBoard(log_dir=self.log_dir, histogram_freq=1)
             # MyCallback()
-        ]
+        ])
 
+    # def set_train_param(self, ep=50, batch=512, verbose=2):
+    #     self.ep = ep
+    #     self.batch = batch
+    #     self.verbose = verbose
 
     def get_opt(self, opt):
         if opt == 'adam':
@@ -124,16 +129,17 @@ class DNN(object):
         print(f"Layers: {units}")
         return units 
 
-    def build_dnn(self):
+    def build_dnn(self, **args):
         x = self.input
         for ii, unit in enumerate(self.units[1:]):
             name = 'l' + str(ii)
             x = self.add_dense_layer(unit, dp_rate=self.dp, reg1=self.reg1, name=name)(x)
         self.model = keras.Model(self.input, x, name="dnn")
 
+    
 
-    def build_model(self):
-        self.build_dnn()
+    def build_model(self, **args):
+        self.build_dnn(**args)
         self.model.compile(
                 loss=self.loss,
                 optimizer=self.opt,

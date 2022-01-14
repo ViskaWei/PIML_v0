@@ -7,10 +7,20 @@ import matplotlib.transforms as transforms
 from matplotlib.lines import Line2D
 from matplotlib import collections  as mc
 
-from PIML.util.constants import Constants
+from PIML.util.util import Util
 
 class BasePlot(object):
     
+#plot spec--------------------------------------------------------------------
+    @staticmethod
+    def plot_spec(wave, flux, pmt=None, ax=None, c='r'):
+        if ax is None: f, ax = plt.subplots(1,1, figsize=(9,3), facecolor="w")
+        ax.plot(wave, flux, c=c)
+        ax.set_xlabel("Wavelength [A]")
+        ax.set_ylabel("Flux [erg/s/cm2/A]")
+        if pmt is not None:
+            name = Util.get_pmt_name(*pmt)
+            ax.set_title(f"{name}")
 
 
 
@@ -177,10 +187,10 @@ class BasePlot(object):
                 handles = fn(i, j, ax, handles)
     
             ax.legend(handles = handles)
-            ax.set_xlabel(Constants.PhyLong[pdxs[i]])            
+            ax.set_xlabel(Util.PhyLong[pdxs[i]])            
             # ax.annotate(f"{self.dR[R0]}-NN", xy=(0.5,0.8), xycoords="axes fraction",fontsize=15, c=self.dRC[R0])           
             # if Ps is not None: ax.set_title(f"[M/H] = {Ps[0]:.2f}, Teff={int(Ps[1])}K, logg={Ps[2]:.2f}")
-            if ylbl: ax.set_ylabel(Constants.PhyLong[pdxs[j]])
+            if ylbl: ax.set_ylabel(Util.PhyLong[pdxs[j]])
             if npdx == 2: return f
         return f
 

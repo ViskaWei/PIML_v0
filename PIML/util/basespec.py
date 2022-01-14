@@ -3,7 +3,7 @@ import scipy as sp
 
 from .util import Util
 
-class BaseSpec(Util):
+class BaseSpec(object):
     """
     Base class for all specifications.
     """
@@ -34,9 +34,6 @@ class BaseSpec(Util):
             raise("No such pmt")
 
 # log norm --------------------------------------------------------------
-    @staticmethod
-    def safe_log(x):
-        return np.log(np.where(x <= 1, 1, x))
 
     @staticmethod
     def normlog_flux(fluxs):
@@ -70,10 +67,6 @@ class BaseSpec(Util):
         lognormflux = np.log(norm_flux)
         return lognormflux
 
-    # @staticmethod
-    # def safe_log(x):
-    #         a = np.exp(args[0]) if args is not None else 1e-10
-    #         return np.log(np.where(x < a, a, x))
 
     @staticmethod
     def lognorm_flux_i(flux):
@@ -163,3 +156,11 @@ class BaseSpec(Util):
 
 # --------------------------------------------------------------------------------- 
 # ---------------------------------------------------------------------------------
+    @staticmethod
+    def get_bnd_from_para(para):
+        PhyMin = np.min(para, axis=0)
+        PhyMax = np.max(para, axis=0)
+        PhyRng = PhyMax - PhyMin
+        PhyNum = PhyRng / Util.PhyTick 
+        PhyMid = (PhyNum //2) * Util.PhyTick + PhyMin
+        return PhyMin, PhyMax, PhyRng, PhyNum, PhyMid

@@ -1,25 +1,12 @@
 import numpy as np
 import pandas as pd
-from .constants import Constants
-from .IO import IO
+from .util import Util
 
-class BaseBox(Constants):
-    """ Box Constants """
-    DRs =  {"M": [[-2.5, 0.0], [3500, 5000], [0.0, 1.5],[-0.75, 0.5], [-0.25, 0.5]], 
-            "W": [[-2.0, 0.0], [5500, 7500], [3.5, 5.0],[-0.75, 0.5], [-0.25, 0.5]],
-            "C": [[-2.0, 0.0], [3750, 5500], [3.5, 5.0],[-0.75, 0.5], [-0.25, 0.5]], 
-            "B": [[-2.5,-1.5], [6750, 9500], [2.0, 3.5],[-0.75, 0.5], [-0.25, 0.5]],
-            "R": [[-1.0, 0.0], [5500, 6750], [2.0, 3.5],[-0.75, 0.5], [-0.25, 0.5]], 
-            "G": [[-2.5,-1.0], [4000, 5500], [1.5, 3.5],[-0.75, 0.5], [-0.25, 0.5]]}
-    DRR = {"M": "M31G"  ,"W":"MWW",       "C":"MWC",  "B":"BHB",       "R":"RHB","G":"DGG"}
-    DRC = {"M": "orange","W":"lightgreen","C":"brown","B":"dodgerblue","R":"red","G":"fuchsia"}
+class BaseBox(Util):
 
-    Rnms = list(DRR.keys())
-    RRnms = list(DRR.values())
 
     def __init__(self):
         super().__init__()
-        self.IO = IO()
 
 
     def init_bnds(self):
@@ -55,15 +42,15 @@ class BaseBox(Constants):
 
     @staticmethod
     def init_para(para):
-        return pd.DataFrame(para, columns=Constants.PhyShort)
+        return pd.DataFrame(para, columns=BaseBox.PhyShort)
 
     @staticmethod
     def get_bnd(R):
         bnd = np.array(BaseBox.DRs[R])
         PhyMin, PhyMax = bnd.T
         PhyRng = np.diff(bnd).T[0]
-        PhyNum = PhyRng / Constants.PhyTick 
-        PhyMid = (PhyNum //2) * Constants.PhyTick + PhyMin
+        PhyNum = PhyRng / BaseBox.PhyTick 
+        PhyMid = (PhyNum //2) * BaseBox.PhyTick + PhyMin
         return PhyMin, PhyMax, PhyRng, PhyNum, PhyMid
 
     @staticmethod
@@ -77,9 +64,9 @@ class BaseBox(Constants):
     @staticmethod
     def get_pdx_scaler_fns(PhyMin):
         def scaler_fn(x):
-            return np.divide((x - PhyMin) ,Constants.PhyTick)
+            return np.divide((x - PhyMin) ,BaseBox.PhyTick)
         def inverse_scaler_fn(x):
-            return x * Constants.PhyTick + PhyMin
+            return x * BaseBox.PhyTick + PhyMin
         return scaler_fn, inverse_scaler_fn
 
     @staticmethod

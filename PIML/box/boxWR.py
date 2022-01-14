@@ -12,6 +12,8 @@ from PIML.method.bias import Bias
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
+from PIML.util.util import Util
+
 # class testBoxWR(BoxWR):
 
 
@@ -54,8 +56,9 @@ class BoxWR(BaseBox):
 
         self.init_sky(self.wave_H, self.flux0, step)
 
-        self.logflux = self.Obs.safe_log(self.flux)
-        self.interp_obs_fn, self.interp_model_fn, self.interp_stdmag_fn, self.interp_bias_fn = self.run_step_rbf(self.logflux, onPCA=onPCA, Obs=self.Obs)
+        self.logflux = Util.safe_log(self.flux)
+
+        self.interp_flux_fn, self.interp_model_fn, self.interp_stdmag_fn, self.interp_bias_fn = self.run_step_rbf(self.logflux, onPCA=onPCA, Obs=self.Obs)
         self.init_LLH()
 
     def init_plot(self):
@@ -79,16 +82,13 @@ class BoxWR(BaseBox):
     def get_flux_in_Wrange(self, wave, flux):
         return Obs._get_flux_in_Wrange(wave, flux, self.Ws)
 
-    def get_random_grid_pmt(self, N_pmt):
-        np.random.seed(926)
-        idx = np.random.randint(0, len(self.para), N_pmt)
-        pmts = self.para[idx]
+    def get_random_grid_pmt(self, nPmt):
+        pmts = Util.get_random_grid_pmt(self.para, nPmt)
         return pmts
 
-    def get_random_pmt(self, N_pmt, nPara=5):
-        pmt0 = np.random.uniform(0,1,(N_pmt,nPara))
-        pmts = self.minmax_rescaler(pmt0)
-        return pmts#
+    def get_random_pmt(self, nPmt, nPara=5, method="halton"):
+        pmts = Util.get_random_uniform(nPmt, nPara, method=method, scaler=self.minmax_rescaler)
+        return pmts
 
     def downsample(self, flux_H):
         wave, flux = Obs.resample(self.wave_H, flux_H, self.step)
@@ -99,13 +99,13 @@ class BoxWR(BaseBox):
         self.RBF = RBF(coord=self.pdx0, coord_scaler=self.pmt2pdx_scaler)
         if onPCA:
             logA, pcflux = self.run_step_pca(logflux, top=self.topk)
-            interp_obs_fn, interp_model_fn, self.rbf_logA, self.rbf_ak = self.RBF.build_PC_rbf_interp(logA, pcflux, self.eigv)
+            interp_AModel_fn, interp_model_fn, self.rbf_logA, self.rbf_ak = self.RBF.build_PC_rbf_interp(logA, pcflux, self.eigv)
             
             if Obs is None:
-                return interp_obs_fn, interp_model_fn
+                return interp_AModel_fn, interp_model_fn
             else:
                 def interp_stdmag_fn(pmt, noise_level):
-                    AModel = interp_obs_fn(pmt, log=0)
+                    AModel = interp_AModel_fn(pmt, log=0)
                     var_in_res = Obs.get_var(AModel, Obs.sky_in_res, step=self.step)
                     sigma_in_res = np.sqrt(var_in_res)
                     stdmag = np.divide(noise_level * sigma_in_res, AModel)
@@ -115,10 +115,25 @@ class BoxWR(BaseBox):
                     if X is None: X = np.random.normal(0,1, self.Npix)
                     bias = self.eigv.dot(np.log(1 + np.multiply(X, stdmag)))
                     return bias
-                return interp_obs_fn, interp_model_fn, interp_stdmag_fn, interp_bias_fn
+                return interp_AModel_fn, interp_model_fn, interp_stdmag_fn, interp_bias_fn
         else:
-            interp_fn = self.RBF.build_logflux_rbf_interp(logflux)
-            return interp_fn, interp_fn
+            interp_flux_fn = self.RBF.build_logflux_rbf_interp(logflux)
+            if Obs is None:
+                return interp_flux_fn, interp_flux_fn
+            else:
+                def interp_stdmag_fn(pmt, noise_level):
+                        AModel = interp_flux_fn(pmt, log=0)
+                        var_in_res = Obs.get_var(AModel, Obs.sky_in_res, step=self.step)
+                        sigma_in_res = np.sqrt(var_in_res)
+                        stdmag = sigma_in_res * noise_level
+                        return sigma_in_res
+                
+                def interp_bias_fn(stdmag, X=None):
+                    if X is None: X = np.random.normal(0,1, self.Npix)
+                    bias =np.multiply(X, stdmag)
+                    return bias
+                return interp_stdmag_fn, interp_bias_fn, 
+
 
     def run_step_pca(self, logfluxs, top=10):
 
@@ -144,7 +159,7 @@ class BoxWR(BaseBox):
     def test_rbf(self, pmt1, pmt2, pmt=None):
         flux1, flux2 = self.get_model(pmt1,onGrid=1),  self.get_model(pmt2,onGrid=1)
         if pmt is None: pmt = 0.5 * (pmt1 + pmt2)
-        interpFlux = self.interp_obs_fn(pmt)
+        interpFlux = self.interp_flux_fn(pmt)
         plt.plot(self.wave, interpFlux, label= pmt)
         plt.plot(self.wave, flux1, label = pmt1)
         plt.plot(self.wave, flux2, label = pmt2)
@@ -155,15 +170,15 @@ class BoxWR(BaseBox):
     def get_model(self, pmt, norm=0, onGrid=0, plot=0):
         if norm:
             model= self.interp_model_fn(pmt)
-            if plot: self.Obs.plot_spec(self.wave, model, pmt=pmt)
+            if plot: BasePlot.plot_spec(self.wave, model, pmt=pmt)
             return model
         else:
             if onGrid:
                 fdx = self.Obs.get_fdx_from_pmt(pmt, self.para)
                 Amodel = self.flux[fdx]
             else:
-                Amodel = self.interp_obs_fn(pmt)
-            if plot: self.Obs.plot_spec(self.wave, Amodel, pmt=pmt)
+                Amodel = self.interp_flux_fn(pmt)
+            if plot: BasePlot.plot_spec(self.wave, Amodel, pmt=pmt)
             return Amodel
     
     def get_bk_fn_from_pmt(self, pmt, noise_level):
@@ -174,9 +189,9 @@ class BoxWR(BaseBox):
             return ak + bias
         return add_bias
 
-    def get_bk_fns(self, noise_level, pmts=None, N_pmts=1, out_bks=1):
+    def get_bk_fns(self, noise_level, pmts=None, nPmts=1, out_bks=1):
         if pmts is None: 
-            pmts = self.get_random_pmt(N_pmts)
+            pmts = self.get_random_pmt(nPmts)
         if out_bks:
             bks = np.zeros((pmts.shape[0], self.topk))
         bk_fns = []
@@ -236,7 +251,7 @@ class BoxWR(BaseBox):
                 noise_level= self.Obs.snr2nl(snr)
         obsfluxs, obsvar = self.make_obs_from_pmt(pmt, noise_level=noise_level,snr=snr, N=N, onPCA=1, plot=0)
         obssigma = np.sqrt(obsvar)
-        AModel = self.interp_obs_fn(pmt, log=0)
+        AModel = self.interp_flux_fn(pmt, log=0)
         nu = (obsfluxs - AModel)
         bk = np.log(obsfluxs).dot(self.eigv.T)
         X = nu / obssigma
@@ -300,8 +315,8 @@ class BoxWR(BaseBox):
         f.suptitle(f'{name} || snr {snr:.1f}')
         f.tight_layout()
 
-    def eval_ak_snr(self, snr, pmts=None, N_pmt=10, N_obs=10, N_plot=None):
-        if pmts is None: pmts = self.get_random_grid_pmt(N_pmt)
+    def eval_ak_snr(self, snr, pmts=None, nPmt=10, N_obs=10, N_plot=None):
+        if pmts is None: pmts = self.get_random_grid_pmt(nPmt)
         if N_plot is None: N_plot = self.topk // 2 - 1
         fns = []
         SNRs= []
@@ -316,8 +331,8 @@ class BoxWR(BaseBox):
         f.tight_layout()
 
 
-    def eval_ak(self, snrList=[50], pmts=None, N_pmt=10, N_obs=10, N_plot=None):
-        if pmts is None: pmts = self.get_random_grid_pmt(N_pmt)
+    def eval_ak(self, snrList=[50], pmts=None, nPmt=10, N_obs=10, N_plot=None):
+        if pmts is None: pmts = self.get_random_grid_pmt(nPmt)
         if N_plot is None: N_plot = self.topk // 2 - 1
         fns = {}
         SNRs = {}
@@ -355,8 +370,8 @@ class BoxWR(BaseBox):
         ax.set_ylabel(f"PC - a{cdx2}") 
 
 
-    def eval_LLH_NL(self, noise_level=None, pmts=None, pdxs=[0,1,2], N_pmt=10, N_obs=10, n_box=0.5):
-        if pmts is None: pmts = self.get_random_pmt(N_pmt)
+    def eval_LLH_NL(self, noise_level=None, pmts=None, pdxs=[0,1,2], nPmt=10, N_obs=10, n_box=0.5):
+        if pmts is None: pmts = self.get_random_pmt(nPmt)
         fns = []
         for pmt in tqdm(pmts):
             preds_pmt = self.eval_LLH_at_pmt(pmt, pdxs, noise_level=noise_level, N_obs=N_obs, plot=0)
@@ -367,11 +382,11 @@ class BoxWR(BaseBox):
         snr = self.estimate_snr(noise_level)
         f.suptitle(f"SNR={snr:.2f}")
 
-    def eval_LLH(self, pmts=None, pdxs=[0,1,2], N_pmt=10, n_box=0.5, snrList=None):
+    def eval_LLH(self, pmts=None, pdxs=[0,1,2], nPmt=10, n_box=0.5, snrList=None):
         if snrList is None: snrList = self.Obs.snrList
-        # if pmts is None: pmts = self.get_random_grid_pmt(N_pmt)
+        # if pmts is None: pmts = self.get_random_grid_pmt(nPmt)
         for snr in snrList:
-            self.eval_LLH_snr(snr, pmts, pdxs, N_pmt, n_box)
+            self.eval_LLH_snr(snr, pmts, pdxs, nPmt, n_box)
 
     def plot_eval_LLH(self, pmt, pred, pdxs, snr, n_box=0.5):
         fns = self.PLT.flow_fn_i(pred, pmt[pdxs], snr, legend=0)
