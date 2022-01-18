@@ -57,7 +57,7 @@ class RBF(object):
             logA = rbf_logA(pmt)
             ak = rbf_ak(pmt)
             logModel = ak.dot(eigv)
-            logAModel = logModel + logA
+            logAModel = logModel + logA[:, np.newaxis]
             if log: 
                 return logAModel
             else:

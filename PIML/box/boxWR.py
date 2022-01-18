@@ -237,7 +237,7 @@ class BoxWR(BaseBox):
     def estimate_snr(self, NL):
         obsfluxH0, _ = self.Obs.add_obs_to_flux(self.fluxH0, NL, step=0)
         bosz_5000_snr_factor = np.sqrt(2)
-        snr = self.Obs.get_snr(obsfluxH0) / bosz_5000_snr_factor
+        snr = Util.get_snr(obsfluxH0) / bosz_5000_snr_factor
         return snr
 
 #Bias------------------------------------------------------------------------
@@ -270,7 +270,7 @@ class BoxWR(BaseBox):
 
     def plot_pca_bias(self,  diffs, bias, biasX, pmt=None, diff_labels=None, N=None):
         if pmt is None: pmt = self.PhyMid
-        title = self.RR + " " + self.Obs.get_pmt_name(*pmt)
+        title = self.RR + " " + Util.get_pmt_name(*pmt)
         f, axs = plt.subplots(1, 3, figsize=(16,4), facecolor="w")
         ak = self.rbf_ak(pmt)
         _=self.Bias.plot_theory_bias(ak, bias, ax=axs[0], N=N, title=title)
@@ -299,7 +299,7 @@ class BoxWR(BaseBox):
     def plot_eval_ak_bias(self, pred, truth, pmt, snr, N_plot, n_box=0.5):
         fns = self.PLT.flow_fn_i(pred, truth, snr, legend=0)
         f = self.PLT.plotN(N_plot=N_plot, fns = fns, lbl="PC - a")
-        name = self.Obs.get_pmt_name(*pmt)
+        name = Util.get_pmt_name(*pmt)
         f.suptitle(f'{name} || snr {snr:.1f}')
         f.tight_layout()
 
@@ -311,7 +311,7 @@ class BoxWR(BaseBox):
         for ii in range(N):
             ax = axs[ii]
             self.plot_ak_cdx(ak, AK, 2*ii, 2*ii + 1, ax=ax)
-        name = self.Obs.get_pmt_name(*pmt)
+        name = Util.get_pmt_name(*pmt)
         f.suptitle(f'{name} || snr {snr:.1f}')
         f.tight_layout()
 
@@ -326,7 +326,7 @@ class BoxWR(BaseBox):
             fns = fns + fns_pmt
             SNRs.append(SNR)
         f = self.PLT.plotN(N_plot=N_plot, fns = fns, lbl="PC - a")
-        name = self.Obs.get_pmt_name(*pmt)
+        name = Util.get_pmt_name(*pmt)
         f.suptitle(f'{name} || snr {snr:.1f}')
         f.tight_layout()
 
@@ -353,7 +353,7 @@ class BoxWR(BaseBox):
             SNRs[snr] = SNR_snr
             self.PLT.plotN(N_plot=N_plot, fns = fns_snr, lbl="PC - a", axs=axs)
             axs[0].set_title(f'SNR {SNR_snr:.1f}')
-        name = self.Obs.get_pmt_name(*pmt)
+        name = Util.get_pmt_name(*pmt)
         fig.suptitle(f'{name}')
         fig.tight_layout()
         return fns, SNRs, pmts

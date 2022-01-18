@@ -104,6 +104,8 @@ class EvalRBF(BaseSpec):
         plt.plot(self.wave, flux1, label=Util.get_pmt_name(*pmt1), c='k')
         plt.plot(self.wave, interpFlux, label=Util.get_pmt_name(*pmt), c='r')
         plt.plot(self.wave, flux2, label=Util.get_pmt_name(*pmt2), c='b')
+        plt.xlabel("Wavelength [A]")
+        plt.ylabel("Flux [erg/s/cm2/A]")
         plt.legend()
 
 

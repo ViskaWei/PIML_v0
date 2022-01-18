@@ -12,6 +12,9 @@ from PIML.util.util import Util
 class BasePlot(object):
     
 #plot spec--------------------------------------------------------------------
+    # @staticmethod
+    
+
     @staticmethod
     def plot_spec(wave, flux, pmt=None, ax=None, c='r'):
         if ax is None: f, ax = plt.subplots(1,1, figsize=(9,3), facecolor="w")

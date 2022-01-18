@@ -61,7 +61,9 @@ class Obs(BaseSpec):
     @staticmethod
     def get_obsflux_N(flux_in_res, var_in_res, noise_level, N):
         fluxs = np.tile(flux_in_res, (N, 1)) 
-        noise = Obs.get_noise_N(var_in_res, N)
+        var_in_res_N = np.tile(var_in_res, (N, 1)) 
+
+        noise = Obs.get_noise(var_in_res_N)
         obsfluxs = fluxs + noise_level * noise
         return obsfluxs
 
@@ -123,24 +125,8 @@ class Obs(BaseSpec):
             return np.divide(varm, step)
 
     @staticmethod
-    def get_noise_N(varm, N):
-        out = np.zeros((N, varm.shape[0]))
-        for i in range(N):
-            out[i] = np.random.normal(0, np.sqrt(varm), len(varm))
-        return out
-
-    @staticmethod
     def get_noise(varm):
-        #--------------------------------------------------------
-        # given the noise variance, create a noise realization
-        # using a Gaussian approximation
-        # Input
-        #  varm: the variance in m-pixel resolution
-        # Output
-        #  noise: nosie realization in m-pixels
-        #--------------------------------------------------------
-        # np.random.seed(42)
-        noise = np.random.normal(0, np.sqrt(varm), len(varm))
+        noise = np.random.normal(0, np.sqrt(varm), np.shape(varm))
         return noise
 
 #plot ---------------------------------------------------------------------------------

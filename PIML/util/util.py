@@ -56,6 +56,8 @@ class Util(Constants):
             sample = np.random.uniform(0, 1, size=(nPmt, nPara))
         if scaler is not None:
             sample = scaler(sample)
+        if nPmt == 1:
+            return sample[0]
         return sample
 
     @staticmethod
