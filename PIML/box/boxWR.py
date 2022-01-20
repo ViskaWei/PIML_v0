@@ -58,7 +58,7 @@ class BoxWR(BaseBox):
 
         self.logflux = Util.safe_log(self.flux)
 
-        self.interp_flux_fn, self.interp_model_fn, self.interp_stdmag_fn, self.interp_bias_fn = self.run_step_rbf(self.logflux, onPCA=onPCA, Obs=self.Obs)
+        self.interp_flux_fn, self.interp_model_fn, self.rbf_sigma, self.interp_bias_fn = self.run_step_rbf(self.logflux, onPCA=onPCA, Obs=self.Obs)
         self.init_LLH()
 
     def init_plot(self):
@@ -104,24 +104,27 @@ class BoxWR(BaseBox):
             if Obs is None:
                 return interp_AModel_fn, interp_model_fn
             else:
-                def interp_stdmag_fn(pmt, noise_level):
+                def rbf_sigma(pmt, noise_level, toPC=0):
                     AModel = interp_AModel_fn(pmt, log=0)
                     var_in_res = Obs.get_var(AModel, Obs.sky_in_res, step=self.step)
                     sigma_in_res = np.sqrt(var_in_res)
-                    stdmag = np.divide(noise_level * sigma_in_res, AModel)
-                    return stdmag
+                    sigma_ak = np.divide(noise_level * sigma_in_res, AModel)
+                    if toPC:
+                        return sigma_ak.dot(self.eigv.T)
+                    else:
+                        return sigma_ak
             
-                def interp_bias_fn(stdmag, X=None):
+                def interp_bias_fn(sigma_ak, X=None):
                     if X is None: X = np.random.normal(0,1, self.Npix)
-                    bias = self.eigv.dot(np.log(1 + np.multiply(X, stdmag)))
+                    bias = self.eigv.dot(np.multiply(X, sigma_ak))
                     return bias
-                return interp_AModel_fn, interp_model_fn, interp_stdmag_fn, interp_bias_fn
+                return interp_AModel_fn, interp_model_fn, rbf_sigma, interp_bias_fn
         else:
             interp_flux_fn = self.RBF.build_logflux_rbf_interp(logflux)
             if Obs is None:
                 return interp_flux_fn, interp_flux_fn
             else:
-                def interp_stdmag_fn(pmt, noise_level):
+                def rbf_sigma(pmt, noise_level):
                         AModel = interp_flux_fn(pmt, log=0)
                         var_in_res = Obs.get_var(AModel, Obs.sky_in_res, step=self.step)
                         sigma_in_res = np.sqrt(var_in_res)
@@ -132,8 +135,7 @@ class BoxWR(BaseBox):
                     if X is None: X = np.random.normal(0,1, self.Npix)
                     bias =np.multiply(X, stdmag)
                     return bias
-                return interp_stdmag_fn, interp_bias_fn, 
-
+                return rbf_sigma, interp_bias_fn, 
 
     def run_step_pca(self, logfluxs, top=10):
 
@@ -183,7 +185,7 @@ class BoxWR(BaseBox):
     
     def get_bk_fn_from_pmt(self, pmt, noise_level):
         ak = self.rbf_ak(pmt)
-        stdmag = self.interp_stdmag_fn(pmt, noise_level)
+        stdmag = self.rbf_sigma(pmt, noise_level)
         def add_bias(X=None):
             bias = self.interp_bias_fn(stdmag, X)
             return ak + bias
@@ -262,7 +264,7 @@ class BoxWR(BaseBox):
             X0 = X.mean(0)
             X20 = X2.mean(0)
         ak = self.rbf_ak(pmt)
-        stdmag = self.interp_stdmag_fn(pmt, noise_level)
+        stdmag = self.rbf_sigma(pmt, noise_level)
         varmag = X20 * stdmag**2
         bias  = self.Bias.get_bias_from_stdmag(stdmag)
         biasX = self.Bias.get_bias_from_stdmag(np.multiply(X0, stdmag),  varmag)
@@ -439,3 +441,43 @@ class BoxWR(BaseBox):
         # # ins.plot(X, MLE_X, 'ko')
         # ins.grid()
 
+
+#DNN-----------------------------------------------------------------------------------------------------------------------
+    def prepare_trainset(self, N, pmts=None, noise_level=1, add_noise=False):
+        if pmts is None: 
+            pmts = self.get_random_pmt(N, method="random")
+        else:
+            pmts = pmts[:N]
+        aks = self.rbf_ak(pmts)
+
+        if add_noise:
+            if noise_level <=1:
+                return aks, pmts
+            else:
+                sigma = self.rbf_sigma(pmts, noise_level) 
+                noiseMat = np.random.normal(0, sigma, sigma.shape)
+                noisePC = noiseMat.dot(self.eigv.T) # convert noise into topk PC basis
+                bks = aks + noisePC  
+                return bks, pmts
+        else:
+            if noise_level <=1:
+                return [aks, np.zeros_like(aks)], pmts
+            else:
+                sigma = self.rbf_sigma(pmts, 1) #noise_level =1 for now, will be add dynamically to NN later   
+                return [aks, sigma], pmts
+
+    def prepare_testset(self, N, pmts=None, noise_level=1, seed=None):
+        if pmts is None: 
+            pmts = self.get_random_pmt(N, method="random")
+        else:
+            pmts = pmts[:N]
+        aks = self.rbf_ak(pmts)
+        if noise_level <=1:
+            return aks, pmts
+        else:
+            sigma = self.rbf_sigma(pmts, noise_level)
+            if seed is not None: np.random.seed(seed)
+            noiseMat = np.random.normal(0, sigma, sigma.shape)
+            noisePC = noiseMat.dot(self.eigv.T) # convert noise into topk PC basis
+            bks = aks + noisePC
+            return bks, pmts

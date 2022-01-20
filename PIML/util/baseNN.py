@@ -3,15 +3,24 @@ from ..nn.dnn.model.noisednn import NoiseDNN
 from PIML.util.constants import Constants
 
 class BaseNN(Constants):
-    def __init__(self, mtype):
+    def __init__(self,):
         self.model =None
-        self.mtype = mtype
+        self.mtype = None
+        self.noise_level=None
 
-    def set_model(self):
-        if self.mtype == 'DNN':
+    def set_model(self, mtype, noise_level=None, eigv=None):
+        self.mtype = mtype
+        if mtype == 'DNN':
             self.model = DNN()
-        elif self.mtype == 'NoiseDNN':
+        elif mtype == 'NoiseDNN':
             self.model = NoiseDNN()
+        else:
+            raise ValueError('Unknown model type: {}'.format(mtype))
+
+        if noise_level is not None:
+            self.model.noise_level = noise_level
+        if eigv is not None:
+            self.model.eigv = eigv
 
     def set_model_shape(self, input_dim, output_dim):
         self.model.set_model_shape(input_dim, output_dim)
@@ -29,9 +38,6 @@ class BaseNN(Constants):
         return x + noise
 
 
-    def build_model(self, noise_level=None):
-        if self.mtype == 'DNN':
-            self.model.build_model()
-        elif self.mtype == 'NoiseDNN':
-            self.model.build_model(noise_level=noise_level)
+    def build_model(self):
+        self.model.build_model()
 

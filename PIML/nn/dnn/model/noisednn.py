@@ -9,43 +9,54 @@ class NoiseDNN(DNN):
     def __init__(self):
         super().__init__()
         self.input2 = keras.Input(shape=(self.input_dim, ), name='stddev')
+        self.eigv = None
+        self.noise_level = None
+        self.mtype = 'NoiseDNN'
         # self.
 
-    def build_dnn(self, noise_level=1):
-        self.model = self.get_model()
+    # def build_dnn(self):
+    #     self.model = self.get_model()
     
-    def get_model(self):
-        x = self.input
-        model = keras.Model(inputs=self.input, outputs=x, name='dnn')
-        return model
+    # def get_model(self):
+    #     x = self.input
+    #     model = keras.Model(inputs=self.input, outputs=x, name='dnn')
+    #     return model
 
-    def build_DataGenerator(self, x_train, x_std, y_train, batch_size=32, shuffle=True, validation_split=0.2):
+    def build_DataGenerator(self, x_train, x_std, y_train, noise_level, batch_size=32, shuffle=True, validation_split=0.2):
         cut = int(x_train.shape[0] * (1 - validation_split))
-        print(f"cut: {cut}")
-        training_generator = DataGenerator(x_train[:cut], x_std[:cut], y_train[:cut], batch_size=batch_size, shuffle=shuffle)
-        validation_generator = DataGenerator(x_train[cut:], x_std[cut:], y_train[cut:], batch_size=batch_size, shuffle=shuffle)
+        # print(f"cut: {cut}")
+        training_generator = DataGenerator(x_train[:cut], x_std[:cut], y_train[:cut], eigv=self.eigv, noise_level=noise_level, batch_size=batch_size, shuffle=shuffle)
+        validation_generator = DataGenerator(x_train[cut:], x_std[cut:], y_train[cut:], eigv=self.eigv, noise_level=noise_level,batch_size=batch_size, shuffle=shuffle)
         return training_generator, validation_generator
 
-    def fit(self,x_train, x_std, y_train, ep=1, batch=512, verbose=2, shuffle=True):
-        training_generator, validation_generator = self.build_DataGenerator(x_train, x_std, y_train, batch_size=batch, shuffle=shuffle, validation_split=0.2)        
-        self.model.fit_generator(generator=training_generator,
-                                validation_data=validation_generator,
-                                use_multiprocessing=False,
-                                workers=6)
-
+    def fit(self,x_train, y_train, nEpoch=1, batch=512, verbose=2, shuffle=True):
+        x_data, x_std = x_train
+        # print(x_data.shape, x_std.shape)
+        training_generator, validation_generator = self.build_DataGenerator(x_data, x_std, y_train, 
+                            noise_level=self.noise_level, batch_size=batch, shuffle=shuffle, validation_split=0.2)        
+        self.model.fit(training_generator, validation_data=validation_generator, batch_size=batch, shuffle=shuffle, epochs=nEpoch, verbose=verbose)
+        if verbose == 0:
+            prints=f"| EP {nEpoch} |"
+            for key, value in self.model.history.history.items():
+                prints = prints +  f"{key[:5]}: {value[-1]:.4f} | "
+            print(prints)
+        tf.keras.backend.clear_session()
+            # print(self.model.summary())
 
 class DataGenerator(tf.keras.utils.Sequence):
-    def __init__(self, data, data_std, labels, noise_level=1, batch_size=32, num_classes=None, shuffle=True):
+    def __init__(self, data, data_std, labels, eigv=None, noise_level=1, batch_size=32, shuffle=True):
         self.batch_size = batch_size
         self.data = data
         self.data_std = self.load_data_std(data_std)
         self.nData, self.nDim = data.shape
+        self.nStd = data_std.shape[1]
         self.indices = np.arange(self.nData)
-        self.num_classes = num_classes
         self.shuffle = shuffle
         self.labels = labels
         self.nLabels = labels.shape[1]
         self.noise_level = noise_level
+        self.eigv = eigv
+        
         self.on_epoch_end()
 
     def load_data_std(self, data_std):
@@ -62,7 +73,6 @@ class DataGenerator(tf.keras.utils.Sequence):
         batch = [self.indices[k] for k in index]
         
         X, y = self.__get_data(batch)
-        print("X=", X, "y=", y)
         return X, y
 
     def on_epoch_end(self):
@@ -71,14 +81,15 @@ class DataGenerator(tf.keras.utils.Sequence):
             np.random.shuffle(self.index)
 
     def __get_data(self, batch):
-        X = np.empty((self.batch_size, self.nDim))
-        y = np.empty((self.batch_size, self.nLabels), dtype=int)
+        # X = np.empty((self.batch_size, self.nDim))
+        # y = np.empty((self.batch_size, self.nLabels))
         
-        for i, id in enumerate(batch):
-            noise = np.random.normal(0, self.noise_level * self.data_std[i], (self.batch_sizem, self.nDim))
-            X[i,] = self.data[id] + noise
-            y[i] = self.labels[id]
-
+        X = self.data[batch]
+        y = self.labels[batch]
+        if self.noise_level >= 1:
+            std = self.data_std[batch]
+            noise = np.random.normal(0, std, size=((self.batch_size, self.nStd)))
+            X = X + noise
         return X, y
 
 

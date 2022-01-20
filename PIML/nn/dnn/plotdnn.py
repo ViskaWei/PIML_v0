@@ -4,7 +4,7 @@ from PIML.util.basebox import BaseBox
 from PIML.util.baseplot import BasePlot
 import matplotlib.pyplot as plt
 
-class plotDNN(BasePlot):
+class PlotDNN(BasePlot):
 
 
     @staticmethod

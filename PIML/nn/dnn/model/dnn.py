@@ -38,6 +38,7 @@ class DNN(object):
         self.model = None
         self.reg1 = None
         self.dp = None
+        self.mtype = "DNN"
         self.callbacks=[]
 
     def set_model_shape(self, input_dim, output_dim, hidden_dims=[]):
@@ -61,7 +62,6 @@ class DNN(object):
             ReduceLROnPlateau('loss',patience=10, min_lr=0., factor=0.1),
             # TensorBoard(log_dir=self.log_dir)
             # TensorBoard(log_dir=self.log_dir, histogram_freq=1)
-            # MyCallback()
         ])
 
     # def set_train_param(self, ep=50, batch=512, verbose=2):
@@ -92,9 +92,9 @@ class DNN(object):
     def predict(self, x_test):
         return self.model.predict(x_test)
 
-    def fit(self, x_train, y_train, ep=50, batch=512, verbose=2):
+    def fit(self, x_train, y_train, nEpoch=50, batch=512, verbose=2):
         self.model.fit(x_train, y_train, 
-                    epochs=ep, 
+                    epochs=nEpoch, 
                     batch_size=batch, 
                     validation_split=0.2, 
                     callbacks=self.callbacks,
@@ -102,7 +102,7 @@ class DNN(object):
                     verbose=verbose
                     )
         if verbose == 0:
-            prints=f"| EP {ep} |"
+            prints=f"| EP {nEpoch} |"
             for key, value in self.model.history.history.items():
                 prints = prints +  f"{key[:5]}: {value[-1]:.4f} | "
             print(prints)

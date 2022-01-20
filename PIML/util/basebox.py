@@ -72,7 +72,7 @@ class BaseBox(Util):
     @staticmethod
     def get_bdx_R(R, dfpara=None, bnds=None, cutCA = False):
         #TODO get range index
-        if dfpara is None: dfpara = IO.read_dfpara()
+        if dfpara is None: dfpara = Util.IO.read_dfpara()
         if bnds is None: 
             bnds = BaseBox.DRs[R]
         Fs, Ts, Gs, Cs, As  = bnds
@@ -96,7 +96,7 @@ class BaseBox(Util):
     def get_bdx(dfpara=None, para=None):
         if dfpara is None: 
             if para is None:
-                dfpara = IO.read_dfpara()
+                dfpara = Util.IO.read_dfpara()
             else:
                 dfpara = BaseBox.init_para(para)
 
@@ -138,7 +138,7 @@ class BaseBox(Util):
         bdx, boxFlux, boxPara = BaseBox.get_flux_para_R(R, flux, para, DBdx=DBdx)
         boxPdx = pdx[bdx] if pdx is not None else None
         RR = BaseBox.DRR[R]
-        if save: IO.save_bosz_box(Res, RR, wave, boxFlux, boxPdx, boxPara, overwrite=1)
+        if save: Util.IO.save_bosz_box(Res, RR, wave, boxFlux, boxPdx, boxPara, overwrite=1)
         return boxFlux, boxPdx, boxPara
 
     @staticmethod

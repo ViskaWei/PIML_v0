@@ -57,7 +57,9 @@ class RBF(object):
             logA = rbf_logA(pmt)
             ak = rbf_ak(pmt)
             logModel = ak.dot(eigv)
-            logAModel = logModel + logA[:, np.newaxis]
+            if isinstance(logA, np.ndarray):
+                logA = logA[:, np.newaxis]
+            logAModel = logModel + logA
             if log: 
                 return logAModel
             else:
