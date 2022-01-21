@@ -89,6 +89,8 @@ class DataGenerator(tf.keras.utils.Sequence):
         if self.noise_level >= 1:
             std = self.data_std[batch]
             noise = np.random.normal(0, std, size=((self.batch_size, self.nStd)))
+            if self.eigv is not None:
+                noise = noise.dot(self.eigv.T)
             X = X + noise
         return X, y
 
