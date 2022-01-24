@@ -1,28 +1,34 @@
 import numpy as np
 import scipy as sp
 import matplotlib.pyplot as plt
-from PIML.method.llh import LLH
+# from PIML.method.llh import LLH
 from PIML.util.basespec import BaseSpec
 from PIML.util.util import Util
 
 class Obs(BaseSpec):
     def __init__(self):
         self.DATADIR = '/home/swei20/LV/data/fisher/'
-        self.sky_fn = None
-        self.skyOG = None
+        self.step = None
         self.sky_H = None
         self.sky_in_res = None
+        
+    
+    def prepare_sky(self, wave, step):
+        self.sky_H = self.init_sky_grid(wave)
+        self.step = step
+        self.sky_in_res = BaseSpec.resampleFlux_i(self.sky_H, step)
+    
+    def prepare_snr(self, flux_in_res):
         self.noise_level_grid = [2,5,10,20,30,40,50,100,200,500,800]
         # self.snrList = [11,22,33,55,110]
         self.snrList = [10, 20, 30, 50]
-        self.nlList = None
-        self.LLH = LLH()
-        self.snr2nl = None
+        snr2nl = self.get_snr2nl_fn(flux_in_res, self.step)
+        self.nlList = snr2nl(self.snrList)
 
-    def get_sky_interp_fn(self):
-        if self.skyOG is None: self.skyOG = self.load_sky_H()
-        cs = np.cumsum(self.skyOG[:,1])
-        f = sp.interpolate.interp1d(self.skyOG[:,0], cs, fill_value=0)
+    @staticmethod
+    def get_sky_interp_fn(skyOG):
+        cs = np.cumsum(skyOG[:,1])
+        f = sp.interpolate.interp1d(skyOG[:,0], cs, fill_value=0)
         return f
 
     def load_skyOG(self):
@@ -31,19 +37,15 @@ class Obs(BaseSpec):
         return skyOG
 
     def init_sky_grid(self, wave_H):
-        self.skyOG = self.load_skyOG()
-        self.sky_fn = self.get_sky_interp_fn()
-        sky_grid = np.diff(self.sky_fn(wave_H))
-        sky_grid = np.insert(sky_grid, 0, self.sky_fn(wave_H[0]))
+        skyOG = self.load_skyOG()
+        sky_fn = Obs.get_sky_interp_fn(skyOG)
+        sky_grid = np.diff(sky_fn(wave_H))
+        sky_grid = np.insert(sky_grid, 0, sky_fn(wave_H[0]))
         print("sky_H", sky_grid.shape)
         return sky_grid
 
-    def prepare_sky(self, wave, flux_in_res, step):
-        self.sky_H = self.init_sky_grid(wave)
-        self.step = step
-        self.sky_in_res = BaseSpec.resampleFlux_i(self.sky_H, step)
-        self.snr2nl = self.get_snr2nl_fn(flux_in_res, step)
-        self.nlList = self.snr2nl(self.snrList)
+
+
 
     def add_obs_to_flux(self, flux_in_res, noise_level, step):
         # act on flux without taking log

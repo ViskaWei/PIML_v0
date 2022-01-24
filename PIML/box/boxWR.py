@@ -5,7 +5,6 @@ from PIML import obs
 from PIML.util.basebox import BaseBox
 from PIML.util.baseplot import BasePlot
 
-from PIML.obs.obs import Obs
 from PIML.method.llh import LLH
 from PIML.method.rbf import RBF
 from PIML.method.bias import Bias
@@ -27,18 +26,15 @@ class BoxWR(BaseBox):
         self.PhyRng = None
         self.PhyNum = None
         self.PhyMid = None
-        self.Obs = Obs()
         self.LLH = LLH()
-        self.PLT = BasePlot()
         self.topk = None
 
 
 
 # init------------------------------------------------------------------------
-
     def init(self, W, R, Res, step, topk=10, onPCA=1):
         self.init_WR(W, R)
-        self.init_plot()
+        self.init_plot_R()
         self.Res = Res
         self.step = step
         self.onPCA = onPCA
@@ -61,16 +57,35 @@ class BoxWR(BaseBox):
         self.interp_flux_fn, self.interp_model_fn, self.rbf_sigma, self.interp_bias_fn = self.run_step_rbf(self.logflux, onPCA=onPCA, Obs=self.Obs)
         self.init_LLH()
 
-    def init_plot(self):
-        self.PLT.make_box_fn = lambda x: self.PLT.box_fn(self.PhyRng, self.PhyMin, 
-                                                        self.PhyMax, n_box=x, 
-                                                        c=BoxWR.DRC[self.R], RR=self.RR)
+
+    # def init(self, W, R, Res, step, topk=10, onPCA=1):
+    #     self.init_WR(W, R)
+    #     self.init_plot_R()
+    #     self.Res = Res
+    #     self.step = step
+    #     self.onPCA = onPCA
+    #     self.topk = topk
+    #     wave_H, flux_H, self.pdx, self.para = self.IO.load_bosz(Res, RR=self.RR)
+    #     self.pdx0 = self.pdx - self.pdx[0]
+    #     self.wave_H, flux_H = self.get_flux_in_Wrange(wave_H, flux_H)
+    #     # self.flux_H = flux_H
+    #     self.Mdx = self.Obs.get_fdx_from_pmt(self.PhyMid, self.para)
+    #     self.fluxH0 = flux_H[self.Mdx]
+
+    #     self.wave, self.flux = self.downsample(flux_H)
+    #     self.Npix = len(self.wave)
+    #     self.flux0 = self.get_model(self.PhyMid, onGrid=1, plot=1)
+
+    #     self.init_sky(self.wave_H, self.flux0, step)
+
+    #     self.logflux = Util.safe_log(self.flux)
+
+    #     self.interp_flux_fn, self.interp_model_fn, self.rbf_sigma, self.interp_bias_fn = self.run_step_rbf(self.logflux, onPCA=onPCA, Obs=self.Obs)
+    #     self.init_LLH()
 
 
-    def init_sky(self, wave_H, flux, step):
-        print(wave_H.shape, flux.shape)
 
-        self.Obs.prepare_sky(wave_H, flux, step)
+ 
 
     def init_LLH(self): 
         self.LLH.get_model = lambda x: self.get_model(x, onGrid=0, plot=0)
@@ -79,8 +94,7 @@ class BoxWR(BaseBox):
         self.LLH.PhyMax = self.PhyMax
 
 
-    def get_flux_in_Wrange(self, wave, flux):
-        return Obs._get_flux_in_Wrange(wave, flux, self.Ws)
+
 
     def get_random_grid_pmt(self, nPmt):
         pmts = Util.get_random_grid_pmt(self.para, nPmt)
@@ -90,9 +104,7 @@ class BoxWR(BaseBox):
         pmts = Util.get_random_uniform(nPmt, nPara, method=method, scaler=self.minmax_rescaler)
         return pmts
 
-    def downsample(self, flux_H):
-        wave, flux = Obs.resample(self.wave_H, flux_H, self.step)
-        return wave, flux
+
 
 #RBF------------------------------------------------------------------------
     def run_step_rbf(self, logflux, onPCA=1, Obs=None):
@@ -167,7 +179,6 @@ class BoxWR(BaseBox):
         plt.plot(self.wave, flux2, label = pmt2)
         plt.legend()
 
-
 # model------------------------------------------------------------------------
     def get_model(self, pmt, norm=0, onGrid=0, plot=0):
         if norm:
@@ -213,13 +224,13 @@ class BoxWR(BaseBox):
             bks[ii] = bk_fn()
         return bks
 
-    def get_bks_N_obs_from_pmt(self, pmt=None, noise_level=1, N_obs=1):
+    def get_bks_nObs_from_pmt(self, pmt=None, noise_level=1, nObs=1):
         if pmt is None: pmt = self.get_random_pmt(1)[0]
         bk_fn = self.get_bk_fn_from_pmt(pmt, noise_level)
-        bk_N_obs = np.zeros((N_obs, self.topk))
-        for ii in range(N_obs):
-            bk_N_obs[ii] = bk_fn()
-        return bk_N_obs
+        bk_nObs = np.zeros((nObs, self.topk))
+        for ii in range(nObs):
+            bk_nObs[ii] = bk_fn()
+        return bk_nObs
         
 
 
@@ -282,10 +293,10 @@ class BoxWR(BaseBox):
 
 #LLH --------------------------------------------------
 
-    def eval_LLH_at_pmt(self, pmt, odxs=[1], noise_level=100, N_obs=10, plot=0):
-        obsfluxs , obsvar = self.make_obs_from_pmt(pmt, noise_level=noise_level, N=N_obs)
+    def eval_LLH_at_pmt(self, pmt, odxs=[1], noise_level=100, nObs=10, plot=0):
+        obsfluxs , obsvar = self.make_obs_from_pmt(pmt, noise_level=noise_level, N=nObs)
         # if snr !=np.inf: 
-        #     snr = self.Obs.get_avg_snr(obsfluxs, top = N_obs)
+        #     snr = self.Obs.get_avg_snr(obsfluxs, top = nObs)
         fns = self.LLH.get_eval_LLH_fns(odxs, pmt, obsvar)
         preds = []
         for fn_pdx, fn in fns.items():
@@ -317,13 +328,13 @@ class BoxWR(BaseBox):
         f.suptitle(f'{name} || snr {snr:.1f}')
         f.tight_layout()
 
-    def eval_ak_snr(self, snr, pmts=None, nPmt=10, N_obs=10, N_plot=None):
+    def eval_ak_snr(self, snr, pmts=None, nPmt=10, nObs=10, N_plot=None):
         if pmts is None: pmts = self.get_random_grid_pmt(nPmt)
         if N_plot is None: N_plot = self.topk // 2 - 1
         fns = []
         SNRs= []
         for pmt in tqdm(pmts):
-            AK, ak, bias, SNR = self.eval_ak_bias(pmt, snr=snr, N_obs=N_obs, plot=0, N_plot=N_plot)
+            AK, ak, bias, SNR = self.eval_ak_bias(pmt, snr=snr, nObs=nObs, plot=0, N_plot=N_plot)
             fns_pmt = self.PLT.flow_fn_i(AK, ak, legend=0)
             fns = fns + fns_pmt
             SNRs.append(SNR)
@@ -333,7 +344,7 @@ class BoxWR(BaseBox):
         f.tight_layout()
 
 
-    def eval_ak(self, snrList=[50], pmts=None, nPmt=10, N_obs=10, N_plot=None):
+    def eval_ak(self, snrList=[50], pmts=None, nPmt=10, nObs=10, N_plot=None):
         if pmts is None: pmts = self.get_random_grid_pmt(nPmt)
         if N_plot is None: N_plot = self.topk // 2 - 1
         fns = {}
@@ -346,7 +357,7 @@ class BoxWR(BaseBox):
             SNRs_snr= []
             axs = axss[ii]
             for pmt in tqdm(pmts):
-                AK, ak, bias, SNR = self.eval_ak_bias(pmt, snr=snr, N_obs=N_obs, plot=0, N_plot=N_plot)
+                AK, ak, bias, SNR = self.eval_ak_bias(pmt, snr=snr, nObs=nObs, plot=0, N_plot=N_plot)
                 fns_pmt = self.PLT.flow_fn_i(AK, ak, legend=0)
                 fns_snr = fns_snr + fns_pmt
                 SNRs_snr.append(SNR)
@@ -372,11 +383,11 @@ class BoxWR(BaseBox):
         ax.set_ylabel(f"PC - a{cdx2}") 
 
 
-    def eval_LLH_NL(self, noise_level=None, pmts=None, pdxs=[0,1,2], nPmt=10, N_obs=10, n_box=0.5):
+    def eval_LLH_NL(self, noise_level=None, pmts=None, pdxs=[0,1,2], nPmt=10, nObs=10, n_box=0.5):
         if pmts is None: pmts = self.get_random_pmt(nPmt)
         fns = []
         for pmt in tqdm(pmts):
-            preds_pmt = self.eval_LLH_at_pmt(pmt, pdxs, noise_level=noise_level, N_obs=N_obs, plot=0)
+            preds_pmt = self.eval_LLH_at_pmt(pmt, pdxs, noise_level=noise_level, nObs=nObs, plot=0)
             fns_pmt = self.PLT.flow_fn_i(preds_pmt, pmt[pdxs], legend=0)
             fns = fns + fns_pmt
 
@@ -481,3 +492,15 @@ class BoxWR(BaseBox):
             noisePC = noiseMat.dot(self.eigv.T) # convert noise into topk PC basis
             bks = aks + noisePC
             return bks, pmts
+
+    def prepare_noiseset(self, pmt, noise_level, nObs):
+        ak0 = self.rbf_ak(pmt)
+        ak = np.tile(ak0, (nObs, 1))
+        if noise_level <=1: 
+            return ak
+        else:
+            sigma0 = self.rbf_sigma(pmt, noise_level)
+            sigma = np.tile(sigma0, (nObs, 1))
+            noiseMat = np.random.normal(0, sigma, sigma.shape)
+            noisePC = noiseMat.dot(self.eigv.T)
+            return ak + noisePC

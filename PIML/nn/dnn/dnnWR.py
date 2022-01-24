@@ -11,6 +11,7 @@ from tensorflow.python.ops.gen_dataset_ops import prefetch_dataset
 from tqdm import tqdm
 
 from PIML.nn.dnn.model.noisednn import NoiseDNN
+from PIML.util.util import Util
 
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
@@ -32,7 +33,7 @@ class dnnWR(BaseBox):
         self.Wnms = ["RML"]
         self.Win = "RedM"
         if BoxWR is not None:
-            self.prepare_trainset, self.prepare_testset = self.init_from_BoxWR(BoxWR)
+            self.prepare_trainset, self.prepare_testset, self.prepare_noiseset = self.init_from_BoxWR(BoxWR)
 
     def init(self, W, R, nFtr=10, out_idx=[0,1,2]):
         self.init_WR(W,R)
@@ -77,6 +78,7 @@ class dnnWR(BaseBox):
         self.nn_scaler, self.nn_rescaler = self.setup_scaler(self.PhyMin, self.PhyMax, self.PhyRng, odx=self.odx)
         self.PhyLong =  [dnnWR.PhyLong[odx_i] for odx_i in self.odx]
         self.estimate_snr = BoxWR.estimate_snr
+        self.get_random_pmt = lambda x: BoxWR.get_random_pmt(x, nPara=5, method="halton")
 
         def prepare_trainset(nTrain, pmts=None, noise_level=None, add_noise=True):
             x, outputs = BoxWR.prepare_trainset(nTrain, pmts=pmts, noise_level=noise_level, add_noise=add_noise)
@@ -88,8 +90,12 @@ class dnnWR(BaseBox):
             x, outputs = BoxWR.prepare_testset(nTest, pmts=pmts, noise_level=noise_level, seed=seed)
             p = outputs[:, self.odx]
             return x, p
+        
+        def prepare_noiseset(pmt, noise_level=1, nObs=1):
+            x = BoxWR.prepare_noiseset(pmt, noise_level, nObs)
+            return x
 
-        return prepare_trainset, prepare_testset
+        return prepare_trainset, prepare_testset, prepare_noiseset
 
     def prepare_model(self, mtype="DNN", train_NL=None, nTrain=1000, nTest=100):
         NN = BaseNN()
@@ -135,7 +141,9 @@ class dnnWR(BaseBox):
     def init_eval(self):
         self.init_plot()
         snr = self.estimate_snr(self.test_NL)
-        self.eval_acc(snr=snr)
+        self.eval_acc(snr)
+        pmts = self.get_random_pmt(10)
+        self.eval_pmts_noise(pmts, self.test_NL, nObs=100, n_box=0.2)
 
     def init_plot(self):
         self.PLT = PlotDNN()
@@ -144,17 +152,18 @@ class dnnWR(BaseBox):
                                                         c=BaseBox.DRC[self.R], RR=self.RR)
 
 
-    def eval_acc(self, snr=1):
+    def eval_acc(self, snr=None):
+        if snr is None: snr = self.test_snr
         f, axs = self.PLT.plot_acc(self.y_pred, self.p_test, self.pMin, self.pMax, RR=self.RR, axes_name = self.PhyLong)
         f.suptitle(f"SNR = {snr:.2f}")
 
 
-    def eval_pmts_noise(self, pmts, noise_level, N_obs=10, n_box=0.5):
+    def eval_pmts_noise(self, pmts, noise_level, nObs=10, n_box=0.5):
         fns = []
         snr = self.estimate_snr(noise_level)
 
         for pmt in tqdm(pmts):
-            tests_pmt = self.gen_input(pmt, noise_level, N_obs=N_obs)
+            tests_pmt = self.prepare_noiseset(pmt, noise_level, nObs)
             preds_pmt = self.predict(tests_pmt)
             fns_pmt = self.PLT.flow_fn_i(preds_pmt, pmt[self.odx], legend=0)
             fns = fns + fns_pmt
@@ -162,8 +171,8 @@ class dnnWR(BaseBox):
         f = self.PLT.plot_box(self.odx, fns = fns, n_box=n_box)
         f.suptitle(f"SNR={snr:.2f}")
 
-    def eval_pmt_noise(self, pmt, noise_level, N_obs, n_box=0.5):
-        tests_pmt = self.gen_input(pmt, noise_level, N_obs=N_obs)
+    def eval_pmt_noise(self, pmt, noise_level, nObs, n_box=0.5):
+        tests_pmt = self.gen_input(pmt, noise_level, nObs=nObs)
         preds = self.predict(tests_pmt)
         snr = self.estimate_snr(noise_level)
         self.PLT.plot_pmt_noise(preds, pmt[self.odx], self.odx, snr, n_box=n_box)
