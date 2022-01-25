@@ -39,7 +39,7 @@ class RBF(object):
     def build_logflux_rbf_interp(self, logflux):
         rbf_interp = self.train_rbf(self.coord, logflux)
         rbf = self.build_rbf(rbf_interp)
-        def interp_flux_fn(x, log=0):
+        def interp_flux_fn(x, log=0, dotA=0):
             logflux = rbf(x)
             if log:
                 return logflux
@@ -53,25 +53,18 @@ class RBF(object):
         rbf_interp_ak = self.train_rbf(self.coord, pcflux)
         rbf_ak = self.build_rbf(rbf_interp_ak)
         
-        def interp_AModel_fn(pmt, log=0):
-            logA = rbf_logA(pmt)
+        def interp_model_fn(pmt, log=0, dotA=1):
             ak = rbf_ak(pmt)
             logModel = ak.dot(eigv)
-            if isinstance(logA, np.ndarray):
-                logA = logA[:, np.newaxis]
-            logAModel = logModel + logA
-            if log: 
-                return logAModel
-            else:
-                return np.exp(logAModel)
-
-        def interp_model_fn(pmt, log=0):
-            ak = rbf_ak(pmt)
-            logModel = ak.dot(eigv)
+            if dotA:
+                logA = rbf_logA(pmt)
+                if isinstance(logA, np.ndarray):
+                    logA = logA[:, np.newaxis]
+                logModel = logModel + logA         
             if log: 
                 return logModel
             else:
                 return np.exp(logModel)
 
-        return interp_AModel_fn, interp_model_fn, rbf_logA, rbf_ak
+        return interp_model_fn, rbf_logA, rbf_ak
 

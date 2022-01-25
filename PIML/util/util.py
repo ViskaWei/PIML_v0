@@ -65,7 +65,17 @@ class Util(Constants):
         idx = np.random.randint(0, len(para), N_pmt)
         pmts = para[idx]
         return pmts
-
+        
+    @staticmethod
+    def get_fdx_from_pmt(pmt, para):
+        mask = True
+        for ii, p in enumerate(pmt):
+            mask = mask & (para[:,ii] == p)
+        try:
+            idx = np.where(mask)[0][0]
+            return idx
+        except:
+            raise("No such pmt")
 
 #sampling----------------------------------------------------------------
     @staticmethod

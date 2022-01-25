@@ -117,7 +117,7 @@ class EvalRBF(BaseSpec):
             return model
         else:
             if onGrid:
-                fdx = BaseSpec.get_fdx_from_pmt(pmt, self.para)
+                fdx = Util.get_fdx_from_pmt(pmt, self.para)
                 Amodel = self.flux[fdx]
             else:
                 Amodel = self.interp_flux_fn(pmt)

@@ -1,3 +1,4 @@
+from multiprocessing.spawn import prepare
 import os
 import h5py
 import numpy as np
@@ -19,82 +20,30 @@ from PIML.util.util import Util
 class BoxWR(BaseBox):
     def __init__(self):
         super().__init__()
-        self.W = None
-        self.R = None
-        self.PhyMin = None
-        self.PhyMax = None
-        self.PhyRng = None
-        self.PhyNum = None
-        self.PhyMid = None
+
         self.LLH = LLH()
         self.topk = None
+        self.Res = None
 
 
 
 # init------------------------------------------------------------------------
     def init(self, W, R, Res, step, topk=10, onPCA=1):
-        self.init_WR(W, R)
+        self.init_W(W)
+        self.init_R(R)
         self.init_plot_R()
         self.Res = Res
-        self.step = step
-        self.onPCA = onPCA
-        self.topk = topk
-        wave_H, flux_H, self.pdx, self.para = self.IO.load_bosz(Res, RR=self.RR)
-        self.pdx0 = self.pdx - self.pdx[0]
-        self.wave_H, flux_H = self.get_flux_in_Wrange(wave_H, flux_H)
-        # self.flux_H = flux_H
-        self.Mdx = self.Obs.get_fdx_from_pmt(self.PhyMid, self.para)
-        self.fluxH0 = flux_H[self.Mdx]
+        self.flux, self.pdx0, self.para = self.prepare_data_R(Res, R, step)
+        self.run_step_rbf(onPCA, topk)
 
-        self.wave, self.flux = self.downsample(flux_H)
-        self.Npix = len(self.wave)
-        self.flux0 = self.get_model(self.PhyMid, onGrid=1, plot=1)
-
-        self.init_sky(self.wave_H, self.flux0, step)
-
-        self.logflux = Util.safe_log(self.flux)
-
-        self.interp_flux_fn, self.interp_model_fn, self.rbf_sigma, self.interp_bias_fn = self.run_step_rbf(self.logflux, onPCA=onPCA, Obs=self.Obs)
+        self.test_rbf(self.PhyMid, axis=1)
         self.init_LLH()
-
-
-    # def init(self, W, R, Res, step, topk=10, onPCA=1):
-    #     self.init_WR(W, R)
-    #     self.init_plot_R()
-    #     self.Res = Res
-    #     self.step = step
-    #     self.onPCA = onPCA
-    #     self.topk = topk
-    #     wave_H, flux_H, self.pdx, self.para = self.IO.load_bosz(Res, RR=self.RR)
-    #     self.pdx0 = self.pdx - self.pdx[0]
-    #     self.wave_H, flux_H = self.get_flux_in_Wrange(wave_H, flux_H)
-    #     # self.flux_H = flux_H
-    #     self.Mdx = self.Obs.get_fdx_from_pmt(self.PhyMid, self.para)
-    #     self.fluxH0 = flux_H[self.Mdx]
-
-    #     self.wave, self.flux = self.downsample(flux_H)
-    #     self.Npix = len(self.wave)
-    #     self.flux0 = self.get_model(self.PhyMid, onGrid=1, plot=1)
-
-    #     self.init_sky(self.wave_H, self.flux0, step)
-
-    #     self.logflux = Util.safe_log(self.flux)
-
-    #     self.interp_flux_fn, self.interp_model_fn, self.rbf_sigma, self.interp_bias_fn = self.run_step_rbf(self.logflux, onPCA=onPCA, Obs=self.Obs)
-    #     self.init_LLH()
-
-
-
- 
 
     def init_LLH(self): 
         self.LLH.get_model = lambda x: self.get_model(x, onGrid=0, plot=0)
         self.LLH.x0 = self.PhyMid
         self.LLH.PhyMin = self.PhyMin
         self.LLH.PhyMax = self.PhyMax
-
-
-
 
     def get_random_grid_pmt(self, nPmt):
         pmts = Util.get_random_grid_pmt(self.para, nPmt)
@@ -105,75 +54,25 @@ class BoxWR(BaseBox):
         return pmts
 
 
-
 #RBF------------------------------------------------------------------------
-    def run_step_rbf(self, logflux, onPCA=1, Obs=None):
-        self.RBF = RBF(coord=self.pdx0, coord_scaler=self.pmt2pdx_scaler)
-        if onPCA:
-            logA, pcflux = self.run_step_pca(logflux, top=self.topk)
-            interp_AModel_fn, interp_model_fn, self.rbf_logA, self.rbf_ak = self.RBF.build_PC_rbf_interp(logA, pcflux, self.eigv)
-            
-            if Obs is None:
-                return interp_AModel_fn, interp_model_fn
-            else:
-                def rbf_sigma(pmt, noise_level, toPC=0):
-                    AModel = interp_AModel_fn(pmt, log=0)
-                    var_in_res = Obs.get_var(AModel, Obs.sky_in_res, step=self.step)
-                    sigma_in_res = np.sqrt(var_in_res)
-                    sigma_ak = np.divide(noise_level * sigma_in_res, AModel)
-                    if toPC:
-                        return sigma_ak.dot(self.eigv.T)
-                    else:
-                        return sigma_ak
-            
-                def interp_bias_fn(sigma_ak, X=None):
-                    if X is None: X = np.random.normal(0,1, self.Npix)
-                    bias = self.eigv.dot(np.multiply(X, sigma_ak))
-                    return bias
-                return interp_AModel_fn, interp_model_fn, rbf_sigma, interp_bias_fn
+    def run_step_rbf(self, onPCA, topk):
+        self.onPCA = onPCA
+        self.topk = topk
+
+        if self.onPCA:
+            self.eigv, self.pcfluc, fns = self.prepare_rbf(self.pdx0, self.pmt2pdx_scaler, self.flux, onPCA=onPCA, Obs=self.Obs)
+            self.interp_flux_fn, self.rbf_ak, self.rbf_sigma, self.interp_bias_fn = fns
         else:
-            interp_flux_fn = self.RBF.build_logflux_rbf_interp(logflux)
-            if Obs is None:
-                return interp_flux_fn, interp_flux_fn
-            else:
-                def rbf_sigma(pmt, noise_level):
-                        AModel = interp_flux_fn(pmt, log=0)
-                        var_in_res = Obs.get_var(AModel, Obs.sky_in_res, step=self.step)
-                        sigma_in_res = np.sqrt(var_in_res)
-                        stdmag = sigma_in_res * noise_level
-                        return sigma_in_res
-                
-                def interp_bias_fn(stdmag, X=None):
-                    if X is None: X = np.random.normal(0,1, self.Npix)
-                    bias =np.multiply(X, stdmag)
-                    return bias
-                return rbf_sigma, interp_bias_fn, 
+            self.interp_flux_fn, self.rbf_sigma, self.interp_bias_fn = self.prepare_rbf(self.pdx0, self.pmt2pdx_scaler, self.flux, onPCA=onPCA, Obs=self.Obs)
 
-    def run_step_pca(self, logfluxs, top=10):
 
-        logA = np.mean(logfluxs, axis=1)
-        lognormModels = logfluxs - logA[:, None]
-
-        u,s,v = np.linalg.svd(lognormModels, full_matrices=False)
-        
-        self.eigv0 = v
-        if top is not None: 
-            u = u[:, :top]
-            s = s[:top]
-            v = v[:top]
-            self.topk = top
-        print("Top10 eigs", s[:10].round(2))
-        assert abs(np.mean(np.sum(v.dot(v.T), axis=0)) -1) < 1e-5
-        assert abs(np.sum(v, axis=1).mean()) < 0.1
-        self.eigv = v
-        pcflux = u * s
-        assert (lognormModels.dot(v.T) - pcflux).max() < 1e-5
-        return logA, pcflux
-
-    def test_rbf(self, pmt1, pmt2, pmt=None):
+    def test_rbf(self, pmt1, pmt2=None, axis=1, pmt=None):
+        if pmt2 is None:
+            pmt2 = np.copy(pmt1)
+            pmt2[axis] += BaseBox.PhyTick[axis]
         flux1, flux2 = self.get_model(pmt1,onGrid=1),  self.get_model(pmt2,onGrid=1)
         if pmt is None: pmt = 0.5 * (pmt1 + pmt2)
-        interpFlux = self.interp_flux_fn(pmt)
+        interpFlux = self.interp_flux_fn(pmt, log=0, dotA=1)
         plt.plot(self.wave, interpFlux, label= pmt)
         plt.plot(self.wave, flux1, label = pmt1)
         plt.plot(self.wave, flux2, label = pmt2)
@@ -182,15 +81,15 @@ class BoxWR(BaseBox):
 # model------------------------------------------------------------------------
     def get_model(self, pmt, norm=0, onGrid=0, plot=0):
         if norm:
-            model= self.interp_model_fn(pmt)
+            model= self.interp_flux_fn(pmt, log=0, dotA=0)
             if plot: BasePlot.plot_spec(self.wave, model, pmt=pmt)
             return model
         else:
             if onGrid:
-                fdx = self.Obs.get_fdx_from_pmt(pmt, self.para)
+                fdx = Util.get_fdx_from_pmt(pmt, self.para)
                 Amodel = self.flux[fdx]
             else:
-                Amodel = self.interp_flux_fn(pmt)
+                Amodel = self.interp_flux_fn(pmt, log=0, dotA=1)
             if plot: BasePlot.plot_spec(self.wave, Amodel, pmt=pmt)
             return Amodel
     
@@ -264,7 +163,7 @@ class BoxWR(BaseBox):
                 noise_level= self.Obs.snr2nl(snr)
         obsfluxs, obsvar = self.make_obs_from_pmt(pmt, noise_level=noise_level,snr=snr, N=N, onPCA=1, plot=0)
         obssigma = np.sqrt(obsvar)
-        AModel = self.interp_flux_fn(pmt, log=0)
+        AModel = self.interp_flux_fn(pmt, log=0, dotA=1)
         nu = (obsfluxs - AModel)
         bk = np.log(obsfluxs).dot(self.eigv.T)
         X = nu / obssigma

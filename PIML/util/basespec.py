@@ -22,16 +22,7 @@ class BaseSpec(object):
         end = np.digitize(Ws[1], wave)
         return wave[start:end], flux[:, start:end]
 
-    @staticmethod
-    def get_fdx_from_pmt(pmt, para):
-        mask = True
-        for ii, p in enumerate(pmt):
-            mask = mask & (para[:,ii] == p)
-        try:
-            idx = np.where(mask)[0][0]
-            return idx
-        except:
-            raise("No such pmt")
+
 
 # log norm --------------------------------------------------------------
 

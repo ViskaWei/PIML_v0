@@ -3,6 +3,7 @@ import pandas as pd
 from .util import Util
 from .baseplot import BasePlot
 from PIML.obs.obs import Obs
+from PIML.method.rbf import RBF
 
 
 class BaseBox(Util):
@@ -11,6 +12,8 @@ class BaseBox(Util):
     def __init__(self):
         super().__init__()
         self.PLT = BasePlot()
+        self.onPCA = None
+        self.wave = None
 
 
 # init ------------------------------------------------------------------------
@@ -21,14 +24,18 @@ class BaseBox(Util):
     def get_flux_in_Wrange(self, wave, flux):
         return Obs._get_flux_in_Wrange(wave, flux, self.Ws)
 
-    def init_WR(self, W, R):
+    def init_WR(self, W, Rs):
         self.init_W(W)
-        if isinstance(R, list):
-            self.init_Rs(R)
-        elif isinstance(R, str):
-            self.init_R(R)
-        else:
-            raise ValueError('R must be a string or a list of strings')
+        self.init_Rs(Rs)
+
+    # def init_WR(self, W, R):
+    #     self.init_W(W)
+    #     if isinstance(R, list):
+    #         self.init_Rs(R)
+    #     elif isinstance(R, str):
+    #         self.init_R(R)
+    #     else:
+    #         raise ValueError('R must be a string or a list of strings')
 
     def init_R(self, R):
         self.R = R
@@ -39,7 +46,7 @@ class BaseBox(Util):
 
     def init_Rs(self, Rs):
         self.Rs = Rs
-        self.RR = [BaseBox.DRR[R] for R in Rs]
+        self.RRs = [BaseBox.DRR[R] for R in Rs]
         self.nR = len(Rs)
         self.init_bnds(Rs)
         self.init_scalers()
@@ -52,49 +59,112 @@ class BaseBox(Util):
         self.DPhyMid = {}
 
         if Rs is None: Rs = BaseBox.Rnms
+        if isinstance(Rs, str): Rs = [Rs]
+
         for R in Rs:
-            PhyMin, PhyMax, PhyRng, PhyNum, PhyMid = self.get_bnd(R)
-            self.DPhyMin[R] = PhyMin
-            self.DPhyMax[R] = PhyMax
-            self.DPhyRng[R] = PhyRng
-            self.DPhyNum[R] = PhyNum
-            self.DPhyMid[R] = PhyMid
+            self.store_bnd(R)
+
+    def store_bnd(self, R):
+        PhyMin, PhyMax, PhyRng, PhyNum, PhyMid = self.get_bnd(R)
+        self.DPhyMin[R] = PhyMin
+        self.DPhyMax[R] = PhyMax
+        self.DPhyRng[R] = PhyRng
+        self.DPhyNum[R] = PhyNum
+        self.DPhyMid[R] = PhyMid        
 
     def init_scalers(self):
         self.minmax_scaler = {}
         self.minmax_rescaler = {}
         self.pmt2pdx_scaler = {}
 
-        for R, PhyMin in self.DPhyMin.items():
-            self.minmax_scaler[R], self.minmax_rescaler[R] = BaseBox.get_minmax_scaler_fns(PhyMin, self.DPhyRng[R])
-            self.pmt2pdx_scaler[R], _ = BaseBox.get_pdx_scaler_fns(PhyMin)
+        for R in self.DPhyMin.keys():
+            self.store_scaler(R)
 
-    
+    def store_scaler(self, R):
+        PhyMin = self.DPhyMin[R]
+        self.minmax_scaler[R], self.minmax_rescaler[R] = BaseBox.get_minmax_scaler_fns(PhyMin, self.DPhyRng[R])
+        self.pmt2pdx_scaler[R], _ = BaseBox.get_pdx_scaler_fns(PhyMin)
+
     def init_plot_R(self):
         self.PLT.make_box_fn = lambda x: self.PLT.box_fn(self.PhyRng, self.PhyMin, 
                                                         self.PhyMax, n_box=x, 
                                                         c=BaseBox.DRC[self.R], RR=self.RR)
 
 # dataloader ------------------------------------------------------------------
-    def load_data(self, Res, RR, step):
-        wave_H, flux_H, self.pdx, self.para = self.IO.load_bosz(Res, RR=self.RR)
-        self.pdx0 = self.pdx - self.pdx[0]
-
-
-    def prepare_data(self, Res, R, step):
+    def prepare_data_R(self, Res, R, step):
         wave_H, flux_H, pdx, para = self.IO.load_bosz(Res, RR=BaseBox.DRR[R])
         pdx0 = pdx - pdx[0]
         wave_H, flux_H = self.get_flux_in_Wrange(wave_H, flux_H)
-        self.wave, flux = Obs.resample(wave_H, flux_H, step)
+        wave, flux = Obs.resample(wave_H, flux_H, step)
+        if self.wave is None: 
+            self.wave = wave
+        else:
+            assert np.all(self.wave == wave)
         self.init_obs(wave_H, step)
+        return flux, pdx0, para
+        
+#rbf ---------------------------------------------------------------------------
+    def prepare_rbf(self, coord, coord_scaler, flux, onPCA=1, Obs=None):
+        logflux = Util.safe_log(flux)
+        rbf = RBF(coord=coord, coord_scaler=coord_scaler)
+        if onPCA:
+            logA, pcflux, eigv = self.prepare_pca(logflux, top=self.topk)
+            interp_flux_fn, rbf_logA, rbf_ak = rbf.build_PC_rbf_interp(logA, pcflux, eigv)
+            if Obs is None:
+                return eigv, pcflux, [interp_flux_fn, rbf_ak, None, None]
+            else:
+                def rbf_sigma(pmt, noise_level):
+                    AModel = interp_flux_fn(pmt, log=0, dotA=1)
+                    var_in_res = Obs.get_var(AModel, Obs.sky_in_res, step=Obs.step)
+                    sigma_in_res = np.sqrt(var_in_res)
+                    sigma_ak = np.divide(noise_level * sigma_in_res, AModel)
+                    return sigma_ak
+            
+                def interp_bias_fn(sigma_ak, nObs=1):
+                    if nObs > 1:
+                        sigma_ak = np.tile(sigma_ak, (nObs, 1))
+                    X = np.random.normal(0, sigma_ak, sigma_ak.shape)
+                    bias = self.eigv.dot(X)
+                    return bias
+                return eigv, pcflux, [interp_flux_fn, rbf_ak, rbf_sigma, interp_bias_fn]
+        else:
+            interp_flux_fn = rbf.build_logflux_rbf_interp(logflux)
+            
+            if Obs is None: 
+                return interp_flux_fn, None, None
+            else:
+                def rbf_sigma(pmt, noise_level):
+                        AModel = interp_flux_fn(pmt, log=0)
+                        var_in_res = Obs.get_var(AModel, Obs.sky_in_res, step=self.step)
+                        sigma_in_res = np.sqrt(var_in_res)
+                        stdmag = sigma_in_res * noise_level
+                        return sigma_in_res
+                
+                def interp_bias_fn(stdmag, X=None):
+                    if X is None: X = np.random.normal(0,1, self.Npix)
+                    bias =np.multiply(X, stdmag)
+                    return bias
+                return interp_flux_fn, rbf_sigma, interp_bias_fn
 
+# PCA --------------------------------------------------------------------------
+    def prepare_pca(self, logfluxs, top=10):
+        logA = np.mean(logfluxs, axis=1)
+        lognormModels = logfluxs - logA[:, None]
+        u,s,v = np.linalg.svd(lognormModels, full_matrices=False)
+        # self.eigv0 = v
 
-
-
-
-
-
-
+        if top is not None: 
+            u = u[:, :top]
+            s = s[:top]
+            v = v[:top]
+            self.topk = len(v)
+        print("Top eigs ", s.round(2))
+        assert abs(np.mean(np.sum(v.dot(v.T), axis=0)) -1) < 1e-5
+        assert abs(np.sum(v, axis=1).mean()) < 0.1
+        
+        pcflux = u * s
+        assert (lognormModels.dot(v.T) - pcflux).max() < 1e-5
+        return logA, pcflux, v
 
 #Obs --------------------------------------------------------------------------
     def init_obs(self, wave_H, step):
@@ -106,14 +176,7 @@ class BaseBox(Util):
         if flux0 is not None:
             self.Obs.prepare_snr(flux0)
 
-
-
-
-
 # static ----------------------------------------------------------------------
-
-
-
     @staticmethod
     def init_para(para):
         return pd.DataFrame(para, columns=BaseBox.PhyShort)
