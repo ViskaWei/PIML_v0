@@ -95,67 +95,74 @@ class BoxW(BaseBox):
         return rands, pmts
 
 #DNN ----------------------------------------------------------------------------   
-    def prepare_trainset(self, N, noise_level=1, add_noise=False):
+    def prepare_trainset(self, N, noise_level=1, add_noise=False, pmts=None):
         x_train, y_train, p_train = {}, {}, {}
         for R in self.Rs:
-            pcfluxs, rands, pmts = self.prepare_trainset_R0(R, N, add_noise=add_noise, noise_level=noise_level)
+            pmts_R = None if pmts is None else pmts[R]
+            pcfluxs, rands, pmts_R = self.prepare_trainset_R0(R, N, pmts=pmts_R, add_noise=add_noise, noise_level=noise_level, onPCA=self.onPCA)
             x_train[R] = pcfluxs
             y_train[R] = rands
-            p_train[R] = pmts
+            p_train[R] = pmts_R
         return x_train, y_train, p_train
 
-    def prepare_trainset_R0(self, R0, N, pmts=None, noise_level=1, add_noise=False):
+    def prepare_trainset_R0(self, R0, N, pmts=None, noise_level=1, add_noise=False, onPCA=1):
         if pmts is None: 
             rands, pmts = self.get_random_pmt_R(R0, N, method="random")
         else:
             pmts = pmts[:N]
             rands = self.minmax_scaler[R0](pmts)
         # aks = self.DRbf_ak[R](pmts)
-        fluxs = self.DRbf_flux[R0](pmts)
-        pcflux = fluxs.dot(self.eigv.T)
-        assert pcflux.shape == (N, self.nFtr)
-        print(f"generating {pcflux.shape} training data for {BaseBox.DRR[R0]}")
+        fluxs = self.DRbf_flux[R0](pmts, log=1, dotA=0)
+        if onPCA:
+            pcfluxs = fluxs.dot(self.eigv.T)
+            assert pcfluxs.shape == (N, self.nFtr)
+            print(f"generating {pcfluxs.shape} training data for {BaseBox.DRR[R0]}")
+            fluxs = pcfluxs
 
         if add_noise:
             if noise_level > 1:
-                sigma = self.DRbf_sigma(pmts, noise_level, divide=0) 
+                sigma = self.DRbf_sigma[R0](pmts, noise_level, divide=1) 
                 noiseMat = np.random.normal(0, sigma, sigma.shape)
-                noisePC = noiseMat.dot(self.eigv.T)
-                pcflux += noisePC
-            out = pcflux
+                if onPCA: 
+                    fluxs += noiseMat.dot(self.eigv.T)
+                else:
+                    fluxs += noiseMat
+            return fluxs, rands, pmts
         else:
             if noise_level > 1:
-                sigma = self.DRbf_sigma(pmts, 1, divide=0) # noise_level is 1 since noise will be added on the fly
-                out = [pcflux, sigma]
+                sigma = self.DRbf_sigma[R0](pmts, 1, divide=1) # noise_level is 1 since noise will be added on the fly
             else:
-                out = [pcflux, 0]
-        return out, rands, pmts
-
-
+                sigma = 0    
+            return [fluxs, sigma], rands, pmts
+            
     def prepare_testset_R0_R1(self, R0, R1, N, pmts=None, noise_level=1, seed=None):
         if pmts is None: 
             _, pmts = self.get_random_pmt_R(R1, N, method="random")
         else:
             pmts = pmts[:N]
-        fluxs = self.DRbf_flux[R1](pmts)
+        fluxs = self.DRbf_flux[R1](pmts, log=1, dotA=0) #dotA=0 or 1 is the same as its orthogonal to PCs.
 
         if noise_level > 1:            
-            sigma = self.DRbf_sigma(pmts, noise_level, divide=0)
+            sigma = self.DRbf_sigma[R0](pmts, noise_level, divide=1)
             if seed is not None: np.random.seed(seed)
             noiseMat = np.random.normal(0, sigma, sigma.shape)
             fluxs = fluxs + noiseMat
+        if self.onPCA:
+            pcfluxs = fluxs.dot(self.eigv.T)
+            return pcfluxs, pmts # convert noise into topk PC basis for R0
+        else:
+            return fluxs, pmts
 
-        pcflux = fluxs.dot(self.DV[R0].T) # convert noise into topk PC basis for R0
-        return pcflux, pmts
-
-    def prepare_testset_R0(self, R0, N, noise_level=1, seed=None):
+    def prepare_testset_R0(self, R0, N, pmts=None, noise_level=1, seed=None):
         x_test, p_test={}, {}
         for R1 in self.Rs:
-            x_test[R1], p_test[R1] = self.prepare_testset_R0_R1(R0, R1, N, noise_level=noise_level, seed=seed)
+            pmts_R1 = None if pmts is None else pmts[R1]
+            x_test[R1], p_test[R1] = self.prepare_testset_R0_R1(R0, R1, N, pmts=pmts_R1, noise_level=noise_level, seed=seed)
         return x_test, p_test
 
-    def prepare_testset(self, N, noise_level, seed=None):
+    def prepare_testset(self, N, pmts=None, noise_level=1, seed=None):
         x_test, p_test={}, {}
         for R0 in self.Rs:
-            x_test[R0], p_test[R0] = self.prepare_testset_R0(R0, N, noise_level=noise_level, seed=seed)
+            pmts_R0 = None if pmts is None else pmts[R0]
+            x_test[R0], p_test[R0] = self.prepare_testset_R0(R0, N, pmts=pmts_R0, noise_level=noise_level, seed=seed)
         return x_test, p_test

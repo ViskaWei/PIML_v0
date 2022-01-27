@@ -53,7 +53,7 @@ class RBF(object):
         rbf_interp_ak = self.train_rbf(self.coord, pcflux)
         rbf_ak = self.build_rbf(rbf_interp_ak)
         
-        def interp_model_fn(pmt, log=0, dotA=1):
+        def interp_model_fn(pmt, log=0, dotA=0):
             ak = rbf_ak(pmt)
             logModel = ak.dot(eigv)
             if dotA:
