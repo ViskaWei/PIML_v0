@@ -45,6 +45,7 @@ class BaseBox(Util):
         self.pmt2pdx_scaler, _ = BaseBox.get_pdx_scaler_fns(self.PhyMin)
 
     def init_Rs(self, Rs):
+        if isinstance(Rs, str): Rs = [Rs]
         self.Rs = Rs
         self.RRs = [BaseBox.DRR[R] for R in Rs]
         self.nR = len(Rs)
@@ -109,42 +110,34 @@ class BaseBox(Util):
         rbf = RBF(coord=coord, coord_scaler=coord_scaler)
         if onPCA:
             logA, pcflux, eigv = self.prepare_pca(logflux, top=self.topk)
-            interp_flux_fn, rbf_logA, rbf_ak = rbf.build_PC_rbf_interp(logA, pcflux, eigv)
-            if Obs is None:
-                return eigv, pcflux, [interp_flux_fn, rbf_ak, None, None]
-            else:
-                def rbf_sigma(pmt, noise_level):
-                    AModel = interp_flux_fn(pmt, log=0, dotA=1)
-                    var_in_res = Obs.get_var(AModel, Obs.sky_in_res, step=Obs.step)
-                    sigma_in_res = np.sqrt(var_in_res)
-                    sigma_ak = np.divide(noise_level * sigma_in_res, AModel)
-                    return sigma_ak
-            
-                def interp_bias_fn(sigma_ak, nObs=1):
-                    if nObs > 1:
-                        sigma_ak = np.tile(sigma_ak, (nObs, 1))
-                    X = np.random.normal(0, sigma_ak, sigma_ak.shape)
-                    bias = self.eigv.dot(X)
-                    return bias
-                return eigv, pcflux, [interp_flux_fn, rbf_ak, rbf_sigma, interp_bias_fn]
+            rbf_flux, rbf_logA, rbf_ak = rbf.build_PC_rbf_interp(logA, pcflux, eigv)
+            if Obs is None: return eigv, pcflux, [rbf_flux, rbf_ak, None, None] 
         else:
-            interp_flux_fn = rbf.build_logflux_rbf_interp(logflux)
-            
-            if Obs is None: 
-                return interp_flux_fn, None, None
+            rbf_flux = rbf.build_logflux_rbf_interp(logflux)
+            if Obs is None: return rbf_flux, None, None
+
+        def rbf_sigma(pmt, noise_level, divide=0):
+            AModel = rbf_flux(pmt, log=0, dotA=1)
+            sigma = Obs.get_sigma_in_res(AModel, noise_level)
+            if divide:
+                # divide for bias in ak
+                return np.divide(sigma, AModel)
             else:
-                def rbf_sigma(pmt, noise_level):
-                        AModel = interp_flux_fn(pmt, log=0)
-                        var_in_res = Obs.get_var(AModel, Obs.sky_in_res, step=self.step)
-                        sigma_in_res = np.sqrt(var_in_res)
-                        stdmag = sigma_in_res * noise_level
-                        return sigma_in_res
-                
-                def interp_bias_fn(stdmag, X=None):
-                    if X is None: X = np.random.normal(0,1, self.Npix)
-                    bias =np.multiply(X, stdmag)
-                    return bias
-                return interp_flux_fn, rbf_sigma, interp_bias_fn
+                return sigma
+
+        def gen_nObs_noise(sigma_ak, nObs=1):
+            if nObs > 1:
+                sigma_ak = np.tile(sigma_ak, (nObs, 1))
+            noise = np.random.normal(0, sigma_ak, sigma_ak.shape)
+            if onPCA: 
+                return eigv.dot(noise)
+            else:
+                return noise
+        
+        if onPCA:
+            return eigv, pcflux, [rbf_flux, rbf_ak, rbf_sigma, gen_nObs_noise]
+        else:
+            return rbf_flux, rbf_sigma, gen_nObs_noise
 
 # PCA --------------------------------------------------------------------------
     def prepare_pca(self, logfluxs, top=10):

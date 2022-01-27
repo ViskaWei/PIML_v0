@@ -24,6 +24,7 @@ class BoxWR(BaseBox):
         self.LLH = LLH()
         self.topk = None
         self.Res = None
+        
 
 
 
@@ -60,7 +61,7 @@ class BoxWR(BaseBox):
         self.topk = topk
 
         if self.onPCA:
-            self.eigv, self.pcfluc, fns = self.prepare_rbf(self.pdx0, self.pmt2pdx_scaler, self.flux, onPCA=onPCA, Obs=self.Obs)
+            self.eigv, self.pcflux, fns = self.prepare_rbf(self.pdx0, self.pmt2pdx_scaler, self.flux, onPCA=onPCA, Obs=self.Obs)
             self.interp_flux_fn, self.rbf_ak, self.rbf_sigma, self.interp_bias_fn = fns
         else:
             self.interp_flux_fn, self.rbf_sigma, self.interp_bias_fn = self.prepare_rbf(self.pdx0, self.pmt2pdx_scaler, self.flux, onPCA=onPCA, Obs=self.Obs)

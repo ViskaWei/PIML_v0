@@ -45,6 +45,12 @@ class Obs(BaseSpec):
         return sky_grid
 
 
+    def get_sigma_in_res(self, flux_in_res, noise_level=1):
+        var_in_res = Obs.get_var(flux_in_res, self.sky_in_res, step=self.step)
+        sigma_in_res = np.sqrt(var_in_res)
+        sigma = noise_level * sigma_in_res
+        return sigma
+
 
 
     def add_obs_to_flux(self, flux_in_res, noise_level, step):
