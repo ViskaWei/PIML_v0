@@ -102,7 +102,7 @@ class dnnWR(BaseBox):
         self.train_NL = train_NL
         NN.set_model(mtype, noise_level=train_NL, eigv=self.eigv)
         NN.set_model_shape(self.nFtr, self.nOdx)
-        self.dnn = NN.model
+        self.dnn = NN.cls
 
         
     def prepare_data(self, nTrain=1000, nTest=100, test_NL=1, seed=None):

@@ -12,15 +12,10 @@ class NoiseDNN(DNN):
         self.eigv = None
         self.noise_level = None
         self.mtype = 'NoiseDNN'
+        self.nn_scaler = None
+        self.nn_rescaler = None
         # self.
 
-    # def build_dnn(self):
-    #     self.model = self.get_model()
-    
-    # def get_model(self):
-    #     x = self.input
-    #     model = keras.Model(inputs=self.input, outputs=x, name='dnn')
-    #     return model
 
     def build_DataGenerator(self, x_train, x_std, y_train, noise_level, batch_size=32, shuffle=True, validation_split=0.2):
         cut = int(x_train.shape[0] * (1 - validation_split))
@@ -42,6 +37,8 @@ class NoiseDNN(DNN):
             print(prints)
         tf.keras.backend.clear_session()
             # print(self.model.summary())
+
+
 
 class DataGenerator(tf.keras.utils.Sequence):
     def __init__(self, data, data_std, labels, eigv=None, noise_level=1, batch_size=32, shuffle=True):
@@ -93,6 +90,9 @@ class DataGenerator(tf.keras.utils.Sequence):
                 noise = noise.dot(self.eigv.T)
             X = X + noise
         return X, y
+
+
+
 
 
 

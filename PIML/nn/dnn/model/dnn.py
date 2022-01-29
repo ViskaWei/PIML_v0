@@ -40,6 +40,7 @@ class DNN(object):
         self.dp = None
         self.mtype = "DNN"
         self.callbacks=[]
+        self.nn_rescaler = None
 
     def set_model_shape(self, input_dim, output_dim, hidden_dims=[]):
         self.input_dim = input_dim
@@ -89,8 +90,12 @@ class DNN(object):
 
     # def run(self, x_train, y_train, x_test, y_test, )
 
-    def predict(self, x_test):
-        return self.model.predict(x_test)
+    def predict(self, x_test, scaler=None):
+        y_pred = self.model.predict(x_test)
+        if scaler is None:
+            return y_pred
+        else:
+            return scaler(y_pred)
 
     def fit(self, x_train, y_train, nEpoch=50, batch=512, verbose=2):
         self.model.fit(x_train, y_train, 
