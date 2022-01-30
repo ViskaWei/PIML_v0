@@ -162,7 +162,7 @@ class BasePlot(object):
 
     @staticmethod
     def box_fn(pRange, pMin, pMax,  n_box=None, c="k", RR=None):
-        box_label = "box" if RR is None else f"{RR}-box"
+        box_label = "box" if RR is None else f"{RR}"
         def fn(i, j , ax, handles=[]):
             if n_box is not None:
                 ax.set_xlim(pMin[i]-n_box*pRange[i], pMax[i]+n_box*pRange[i])

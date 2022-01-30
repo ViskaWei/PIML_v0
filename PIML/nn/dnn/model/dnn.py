@@ -58,7 +58,7 @@ class DNN(object):
         self.hidden_dims = np.array(hidden_dims)
         self.units = self.get_units()
 
-    def set_model_param(self, lr=0.01, dp=0.0, loss='mse', opt='adam'):
+    def set_model_param(self, lr=0.1, dp=0.0, loss='mse', opt='adam'):
         self.lr = lr
         self.dp = dp
         self.opt = self.get_opt(opt)
@@ -66,19 +66,18 @@ class DNN(object):
         # self.log_dir = "logs/fit/" + self.name        
         self.callbacks.append([
             # EarlyStopping(monitor='loss', patience=10),
-            ReduceLROnPlateau('loss',patience=10, min_lr=0.0001, factor=0.03),
+            ReduceLROnPlateau('loss',patience=20, min_lr=0.0001, factor=0.3),
             # TensorBoard(log_dir=self.log_dir)
             # TensorBoard(log_dir=self.log_dir, histogram_freq=1)
         ])
 
     def set_tensorboard(self, log_dir, name="", verbose=1):
         self.name = self.get_model_name(name)
-        log_dir = log_dir + self.name        
-        
+        log_path = os.path.join(log_dir, self.name)        
         self.callbacks.append([
-            TensorBoard(log_dir=log_dir, histogram_freq=verbose)
+            TensorBoard(log_dir=log_path, histogram_freq=verbose)
         ])
-        return log_dir
+        return log_path
 
 
     def get_opt(self, opt):
@@ -90,8 +89,7 @@ class DNN(object):
             raise 'optimizer not working'
 
     def get_model_name(self, name):
-        lr_name = -np.log10(self.lr)
-        out_name = f'{self.mtype[:3]}_nl{self.noise_level}_lr{lr_name}_I{self.input_dim}_h{len(self.hidden_dims)}_O{self.output_dim}_'
+        out_name = f'{self.mtype[:3]}_nl{self.noise_level}_lr{self.lr}_I{self.input_dim}_h{len(self.hidden_dims)}_O{self.output_dim}_'
         if self.dp != 0:
             out_name = out_name + f'dp{self.dp}_'
         t = datetime.datetime.now().strftime("%d_%H%M")

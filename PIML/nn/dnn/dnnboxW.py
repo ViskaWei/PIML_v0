@@ -95,7 +95,7 @@ class DnnBoxW(BoxW):
             self.train_R0(R0, model=model_R0, lr=lr, dp=dp, batch=batch, nEpoch=nEpoch, verbose=verbose)
         
         if eval:
-            self.test(test_NL=self.train_NL, nTest=100, new=True)
+            self.test(test_NL=self.train_NL, nTest=100)
             
 
 
@@ -116,9 +116,11 @@ class DnnBoxW(BoxW):
     def test(self, test_NL=None, nTest=100, pmts=None, new=False):
         self.nTest = nTest
         self.test_NL = test_NL
-        self.x_test, self.p_test = self.prepare_testset(self.nTest, pmts=pmts, noise_level=test_NL, seed=922, odx=self.odx)
+        self.nnRs = list(self.nn.keys())
+        if self.x_test is None or new:
+            self.x_test, self.p_test = self.prepare_testset(self.nTest, pmts=pmts, noise_level=test_NL, seed=922, odx=self.odx)
         
-        for R0 in self.nn.keys():
+        for R0 in self.nnRs:
             self.p_pred[R0] = self.test_R0(R0, self.x_test) 
         vertical = 1 if self.nR > 2 else 0
         self.eval(self.p_pred, self.p_test, vertical=vertical)
@@ -171,13 +173,13 @@ class DnnBoxW(BoxW):
 
     def eval_box(self, p_pred, n_box=1, snr=None):
         crossMat = self.PLT.get_crossMat(p_pred)
-        for R0 in self.Rs:
+        for R0 in self.nnRs:
             self.eval_box_R0(R0, crossMat=crossMat, n_box=n_box, snr=snr)
 
     def eval_box_R0(self, R0, crossMat=None, n_box=0.2, snr=None):
         fns = []
         if crossMat is not None:
-            R0_idx = self.Rs.index(R0)
+            R0_idx = self.nnRs.index(R0)
             crossMat_R0 = crossMat[R0_idx]
         for ii, R1 in enumerate(self.Rs):
             lgd = None if crossMat is None else crossMat_R0[ii]   

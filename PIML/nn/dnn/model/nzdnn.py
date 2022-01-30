@@ -29,7 +29,13 @@ class NzDNN(DNN):
         # print(x_data.shape, x_std.shape)
         training_generator, validation_generator = self.build_DataGenerator(x_data, x_std, y_train, 
                             noise_level=self.noise_level, batch_size=batch, shuffle=shuffle, validation_split=0.2)        
-        self.model.fit(training_generator, validation_data=validation_generator, batch_size=batch, shuffle=shuffle, epochs=nEpoch, verbose=verbose)
+        self.model.fit(training_generator, 
+                        validation_data=validation_generator, 
+                        callbacks=self.callbacks,
+                        batch_size=batch, 
+                        shuffle=shuffle, 
+                        epochs=nEpoch, 
+                        verbose=verbose)
         if verbose == 0:
             prints=f"| EP {nEpoch} |"
             for key, value in self.model.history.history.items():

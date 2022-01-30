@@ -79,7 +79,7 @@ class PlotDNN(BasePlot):
 
     
     def make_box_fn_R0(self, R0, n_box=None, c="k"):
-        box_label = f"{Util.DRR[R0]}-box"
+        box_label = f"{Util.DRR[R0]}"
         pMin = self.pMins[R0]
         pMax = self.pMaxs[R0]
         pRng = self.pRngs[R0]
@@ -113,10 +113,11 @@ class PlotDNN(BasePlot):
         return crossover, crossover_ijs
 
     def get_crossMat(self, p_preds, plot=1):
-        Rs = p_preds.keys()
-        nR = len(Rs)
-        mat = np.zeros((nR, nR))
-        mat_ij = np.zeros((nR, nR, self.nOdx))
+        R0s = p_preds.keys()
+        nR0 = len(R0s)
+        nR1 = len(self.Rs)
+        mat = np.zeros((nR0, nR1))
+        mat_ij = np.zeros((nR0, nR1, self.nOdx))
 
         for ii, (R0, p_preds_R0) in enumerate(p_preds.items()):
             for jj, (R1, p_preds_R0_R1) in enumerate(p_preds_R0.items()):
@@ -124,17 +125,18 @@ class PlotDNN(BasePlot):
                 #     CT[ii,jj] = 1 - self.get_contamination_R0_R1(R0, R1)
                 # else:
                 mat[ii][jj], mat_ij[ii][jj] = self.get_crossover_R0_R1(R0, p_preds_R0_R1)
-        RRs = [Util.DRR[R] for R in Rs]
-        if plot: PlotDNN.plot_heatmap(mat, RRs)
+        
+        RR0s = [Util.DRR[R] for R in R0s]
+        RR1s = [Util.DRR[R] for R in self.Rs]
+        if plot: PlotDNN.plot_heatmap(mat, RR0s, RR1s)
         return mat_ij
 
 
     @staticmethod
-    def plot_heatmap(mat, RRs, vmax=0.5, ax=None):
-
+    def plot_heatmap(mat, RR0s, RR1s=None, vmax=0.5, ax=None):
         if ax is None:
             f, ax = plt.subplots(figsize=(6,5), facecolor="gray")
         sns.heatmap(mat, vmax=vmax, ax=ax, annot=True, cmap="inferno")
-        ax.set_xticklabels(RRs)
-        ax.set_yticklabels(RRs)
+        if RR1s is not None: ax.set_xticklabels(RR1s)
+        ax.set_yticklabels(RR0s)
         ax.set_title("Crossover Heatmap")

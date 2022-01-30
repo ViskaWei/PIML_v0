@@ -1,4 +1,5 @@
 import os
+import logging
 from ..nn.dnn.model.dnn import DNN 
 from ..nn.dnn.model.nzdnn import NzDNN
 from PIML.util.constants import Constants
@@ -31,7 +32,8 @@ class BaseNN(Constants):
 
     def set_tensorboard(self, name="", verbose=1):
         self.cls.save_dir = self.save_dir
-        _=self.cls.set_tensorboard(self.log_dir, name, verbose)
+        log_path=self.cls.set_tensorboard(self.log_dir, name, verbose)
+        logging.info("Tensorboard log path: {}".format(log_path))
 
 
 
