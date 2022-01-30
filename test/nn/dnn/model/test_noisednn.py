@@ -1,11 +1,11 @@
 import numpy as np
-from PIML.nn.dnn.model.noisednn import NoiseDNN, DataGenerator 
+from PIML.nn.dnn.model.nzdnn import NzDNN, DataGenerator 
 from testbase import TestBase
 
-class Test_NoiseDNN(TestBase):
+class Test_NzDNN(TestBase):
 
     def test_init(self):
-        self.dnn = NoiseDNN()
+        self.dnn = NzDNN()
         self.N = 10
         self.dnn.set_model_shape(self.N,self.N)
         self.dnn.set_model_param()

@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import logging
 from .util import Util
 from .baseplot import BasePlot
 from PIML.obs.obs import Obs
@@ -151,7 +152,7 @@ class BaseBox(Util):
             s = s[:top]
             v = v[:top]
             self.topk = len(v)
-        print("Top eigs ", s.round(2))
+        logging.info(f"Top eigs {s.round(2)}")
         assert abs(np.mean(np.sum(v.dot(v.T), axis=0)) -1) < 1e-5
         assert abs(np.sum(v, axis=1).mean()) < 0.1
         
@@ -243,7 +244,7 @@ class BaseBox(Util):
         bdx = DBdx[R]
         boxFlux = flux[bdx]
         boxPara = para[bdx]
-        print(boxFlux.shape, boxPara.shape)
+        logging.info("Flux {boxFlux.shape}, Para {boxPara.shape}")
         return bdx, boxFlux, boxPara
 
     @staticmethod
@@ -276,3 +277,11 @@ class BaseBox(Util):
         pmt0 = np.random.uniform(0,1,(N_pmt,5))
         pmts = pmt0 * PhyRng + PhyMin   
         return pmts
+
+#collect ---------------------------------------------------------------
+    @staticmethod
+    def collect_fn(Rs, fn):
+        Dfn_outs = {}
+        for R in Rs:
+            Dfn_outs[R] = fn(R)
+        return Dfn_outs

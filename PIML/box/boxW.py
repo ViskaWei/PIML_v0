@@ -1,5 +1,6 @@
 import os
 import h5py
+import logging
 import numpy as np
 from PIML import obs
 from PIML.util.basebox import BaseBox
@@ -37,7 +38,7 @@ class BoxW(BaseBox):
         self.DRbf_noiz = {}
 
 
-    def init_box(self, W, Rs, Res, step, topk=10, onPCA=1):
+    def init_box(self, W, Rs, Res, step, topk=10, onPCA=1, load_eigv=False):
         self.init_WR(W,Rs)
         self.Res = Res
         self.step = step
@@ -45,25 +46,45 @@ class BoxW(BaseBox):
         self.onPCA = onPCA
         for R in self.Rs:
             self.run_step_rbf(R)
+        if load_eigv: 
+            self.DV = self.load_eigv(topk=topk)
         self.set_eigv()
         # self.init_plot_R()
 
-    def set_eigv(self):
-        eigvs = []
+    def save_eigv(self):
+        
+        self.IO.save_eigv(self.DV)
+
+    def load_eigv(self, topk=None, stack=0):
+        DV = self.IO.load_eigv(topk=topk)
+        if stack:
+            self.DV = DV
+            self.set_eigv()
+        else:
+            return DV
+
+    def stack_eigv(self):
         nFtr = 0
+        eigvs = []
         for eigv in self.DV.values():
             eigvs.append(eigv)
             nFtr += len(eigv)
-        self.eigv = np.vstack(eigvs)
-        self.nFtr = nFtr
+        return np.vstack(eigvs), nFtr
+
+    def set_eigv(self):
+        self.eigv, self.nFtr = self.stack_eigv()
+
+        
+        
 
 #rbf -----------------------------------------------------------------------------------------------------------------------
     def run_step_rbf(self, R):
-        print(f"=============================PREPARING {R}=====================")
+        logging.info(f"=============================PREPARING {R}=====================")
         if R not in self.Rs:
             self.store_bnd(R)
             self.store_scaler(R)
             self.Rs.append(R)
+            self.RRs.append(BaseBox.DRR[R])
         flux, pdx0, para = self.prepare_data_R(self.Res, R, self.step)
         self.DPara[R] = para
 
@@ -72,7 +93,7 @@ class BoxW(BaseBox):
                                                 flux, onPCA=self.onPCA, Obs=self.Obs)
             rbf_flux, rbf_ak, rbf_sigma, gen_nObs_noise = fns
             error = abs(pcflux - rbf_ak(para)).sum()
-            print(f"error: {error}")
+            logging.info(f"error: {error}")
 
             self.DV[R] = eigv
             self.DAk[R] = pcflux
@@ -84,7 +105,7 @@ class BoxW(BaseBox):
             rbf_flux, rbf_sigma, gen_nObs_noise =  self.prepare_rbf(pdx0, self.pmt2pdx_scaler[R], 
                                                                             flux, onPCA=self.onPCA, Obs=self.Obs)
             error = abs(np.log(flux) - rbf_flux(para, log=1, dotA=1)).sum()
-            print(f"error: {error}")
+            logging.info(f"error: {error}")
             self.DRbf_sigma[R] = rbf_sigma
             self.DRbf_flux[R] = rbf_flux
 
@@ -117,7 +138,7 @@ class BoxW(BaseBox):
         if onPCA:
             pcfluxs = fluxs.dot(self.eigv.T)
             assert pcfluxs.shape == (N, self.nFtr)
-            print(f"generating {pcfluxs.shape} training data for {BaseBox.DRR[R0]}")
+            logging.info(f"generating {pcfluxs.shape} training data for {BaseBox.DRR[R0]}")
             fluxs = pcfluxs
 
         if add_noise:

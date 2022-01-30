@@ -61,6 +61,8 @@ class Constants():
         PARA_PATH = "/datascope/subaru/user/swei20/data/pfsspec/import/stellar/grid/para.csv"
         SKY_PATH = "/home/swei20/LV/data/fisher/skybg_50_10.csv"
         DATA_PATH = "/home/swei20/PhysicsInformedML/data/"
+        LOG_DIR   = "/home/swei20/PhysicsInformedML/logs/"
+        MODEL_DIR = "/home/swei20/PhysicsInformedML/models/"
 
 
 

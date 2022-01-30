@@ -116,8 +116,9 @@ class BasePlot(object):
     def scatter_fn(data, c=None, s=1, lgd=None):
         def fn(i, j, ax, handles=[]):
             ax.scatter(data[:,i], data[:,j],s=s, c=c)
-            if lgd is not None: 
-                handles.append(Line2D([0], [0], marker='o',color='w', label=lgd, markerfacecolor=c, markersize=10))
+            if lgd is not None:
+                lgd0 = lgd[i] if isinstance(lgd, (list, np.ndarray)) else lgd
+                handles.append(Line2D([0], [0], marker='o',color='w', label=lgd0, markerfacecolor=c, markersize=10))
             return handles
         return fn
 

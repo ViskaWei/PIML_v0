@@ -1,3 +1,4 @@
+from ast import Constant
 from .dnn import DNN
 import numpy as np
 import tensorflow as tf
@@ -5,16 +6,15 @@ from tensorflow import keras
 from tensorflow.keras.callbacks import Callback
 from tensorflow.keras import backend as K
 
-class NoiseDNN(DNN):
+class NzDNN(DNN):
     def __init__(self):
         super().__init__()
         self.input2 = keras.Input(shape=(self.input_dim, ), name='stddev')
         self.eigv = None
         self.noise_level = None
-        self.mtype = 'NoiseDNN'
+        self.mtype = 'nzDNN'
         self.nn_scaler = None
         self.nn_rescaler = None
-        # self.
 
 
     def build_DataGenerator(self, x_train, x_std, y_train, noise_level, batch_size=32, shuffle=True, validation_split=0.2):

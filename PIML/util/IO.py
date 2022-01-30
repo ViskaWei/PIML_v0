@@ -76,6 +76,15 @@ class IO():
         print(para)
         return pdx.T, para.T
 
+    @staticmethod
+    def load_eigv(topk=None, LOAD_PATH=None):
+        if LOAD_PATH is None: SAVE_PATH = Constants.DATA_PATH + "eigv.h5"
+        DV = {}
+        with h5py.File(SAVE_PATH, "r") as f:
+            for R, V in f.items():
+                DV[R] = V[:topk]               
+        return DV
+
 
 #save --------------------------------------------------------------------------------
     @staticmethod
@@ -94,7 +103,6 @@ class IO():
             if pdx is not None:
                 f.create_dataset('pdx', data=pdx, shape=pdx.shape)
             f.create_dataset('para', data=para, shape=para.shape)
-
 
     @staticmethod
     def save_laszlo_bosz(Res, wave, flux_valid, pdx, para, W="", overwrite=0):
@@ -120,6 +128,13 @@ class IO():
     def save_bosz_box(Res, RR, wave, flux, pdx, para, overwrite=0):
         SAVE_PATH = os.path.join(Constants.GRID_DIR, f"bosz_{Res}_{RR}.h5")
         IO.save(wave, flux, pdx, para, SAVE_PATH, overwrite)
+
+    @staticmethod
+    def save_eigv(DV, SAVE_PATH=None):
+        if SAVE_PATH is None: SAVE_PATH = Constants.DATA_PATH + "eigv.h5"
+        with h5py.File(SAVE_PATH, "w") as f:
+            for R, V in DV.items():
+                f.create_dataset(R, data=V, shape=V.shape)
 
 
     # def save_ak(self, pmt=None, SAVE_PATH=None):

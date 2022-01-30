@@ -1,4 +1,5 @@
 import os
+from tabnanny import verbose
 import numpy as np
 import pandas as pd
 import logging
@@ -41,6 +42,12 @@ class DNN(object):
         self.mtype = "DNN"
         self.callbacks=[]
         self.nn_rescaler = None
+        self.name = None
+        self.save_dir = None
+        self.log_dir = None
+        self.noise_level = None
+        self.ep = None
+
 
     def set_model_shape(self, input_dim, output_dim, hidden_dims=[]):
         self.input_dim = input_dim
@@ -51,24 +58,28 @@ class DNN(object):
         self.hidden_dims = np.array(hidden_dims)
         self.units = self.get_units()
 
-    def set_model_param(self, lr=0.01, dp=0.0, loss='mse', opt='adam', name=''):
+    def set_model_param(self, lr=0.01, dp=0.0, loss='mse', opt='adam'):
         self.lr = lr
         self.dp = dp
         self.opt = self.get_opt(opt)
         self.loss = loss
-        # self.name = self.get_name(name)
         # self.log_dir = "logs/fit/" + self.name        
         self.callbacks.append([
-            EarlyStopping(monitor='loss', patience=10),
-            ReduceLROnPlateau('loss',patience=10, min_lr=0., factor=0.1),
+            # EarlyStopping(monitor='loss', patience=10),
+            ReduceLROnPlateau('loss',patience=10, min_lr=0.0001, factor=0.03),
             # TensorBoard(log_dir=self.log_dir)
             # TensorBoard(log_dir=self.log_dir, histogram_freq=1)
         ])
 
-    # def set_train_param(self, ep=50, batch=512, verbose=2):
-    #     self.ep = ep
-    #     self.batch = batch
-    #     self.verbose = verbose
+    def set_tensorboard(self, log_dir, name="", verbose=1):
+        self.name = self.get_model_name(name)
+        log_dir = log_dir + self.name        
+        
+        self.callbacks.append([
+            TensorBoard(log_dir=log_dir, histogram_freq=verbose)
+        ])
+        return log_dir
+
 
     def get_opt(self, opt):
         if opt == 'adam':
@@ -78,24 +89,21 @@ class DNN(object):
         else:
             raise 'optimizer not working'
 
-    # def get_name(self, name):
-    #     lr_name = -np.log10(self.lr)
-    #     out_name = f'{self.loss}_lr{lr_name}_h{len(self.hidden_dims)}'
-    #     if self.dp != 0:
-    #         out_name = out_name + f'dp{self.dp}_'
-    #     t = datetime.datetime.now().strftime("%m%d-%H%M%S")
-    #     out_name = out_name + name + '_' + t
-    #     return out_name.replace('.', '')
+    def get_model_name(self, name):
+        lr_name = -np.log10(self.lr)
+        out_name = f'{self.mtype[:3]}_nl{self.noise_level}_lr{lr_name}_I{self.input_dim}_h{len(self.hidden_dims)}_O{self.output_dim}_'
+        if self.dp != 0:
+            out_name = out_name + f'dp{self.dp}_'
+        t = datetime.datetime.now().strftime("%d_%H%M")
+        out_name = name + out_name + t
+        return out_name.replace('.', '')
 
 
     # def run(self, x_train, y_train, x_test, y_test, )
 
-    def predict(self, x_test, scaler=None):
+    def _predict(self, x_test):
         y_pred = self.model.predict(x_test)
-        if scaler is None:
-            return y_pred
-        else:
-            return scaler(y_pred)
+        return self.nn_rescaler(y_pred)
 
     def fit(self, x_train, y_train, nEpoch=50, batch=512, verbose=2):
         self.model.fit(x_train, y_train, 
@@ -121,7 +129,7 @@ class DNN(object):
     def get_units(self):
         if self.hidden_dims.size == 0:
             if self.input_dim <= 150:
-                hidden_dims = np.array([64, 32, 16])
+                hidden_dims = np.array([128, 64, 32, 16])
 
                 # hidden_dims = np.array([128, 64, 32])
             elif self.input_dim < 2048:
@@ -166,6 +174,11 @@ class DNN(object):
                     ])
         return layer
 
+    def save_model(self):
+        path = os.path.join(self.save_dir, self.name, 'model.h5')
+        print("saving model to: ", path)
+        self.model.save(path)
+    
     # def eval(self, x_test, y_test, WR, Prng):
     #     if self.top is not None:
     #         if self.mtype == "PCA":

@@ -3,7 +3,7 @@ import scipy as sp
 # from scipy.stats import qmc
 from .IO import IO
 from .constants import Constants
-
+import logging
 
 
 class Util(Constants):
@@ -12,6 +12,8 @@ class Util(Constants):
     """
     def __init__(self):
         self.IO = IO()
+        Util.setup_logging()
+        # logging.info("Util initialized")
         
 
     @staticmethod
@@ -101,3 +103,16 @@ class Util(Constants):
     @staticmethod
     def safe_log(x):
         return np.log(np.where(x <= 1, 1, x))
+
+    @staticmethod
+    def setup_logging(logfile=None):
+        logging.basicConfig()
+        # logging.basicConfig(filename=f'.log', encoding='utf-8', level=logging.DEBUG)
+        root = logging.getLogger()
+        root.setLevel(Util.get_logging_level())
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+    @staticmethod
+    def get_logging_level():
+        # return logging.DEBUG if self.debug else logging.INFO
+        return logging.INFO

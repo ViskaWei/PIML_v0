@@ -5,6 +5,7 @@ from PIML.util.baseplot import BasePlot
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Ellipse, Patch
 from PIML.util.util import Util
+import seaborn as sns
 
 
 
@@ -12,7 +13,8 @@ class PlotDNN(BasePlot):
     def __init__(self, odx):
         self.odx = odx
         self.nOdx = len(odx)
-
+        self.Rs = None
+        self.RRs = None
         self.pRngs = None
         self.pMins = None
         self.pMaxs = None
@@ -90,3 +92,49 @@ class PlotDNN(BasePlot):
             return handles
         return fn
 
+    def get_crossover_R0_R1(self, R0, p_pred_R1):
+        mask_ij = []
+        mask_All = True
+        N = len(p_pred_R1)
+        for pdx in range(self.nOdx):
+            mask0 = True & (p_pred_R1[:,pdx] >= self.pMins[R0][pdx]) & (p_pred_R1[:,pdx] <= self.pMaxs[R0][pdx])
+            mask_All = mask_All & mask0
+            mask_ij.append(mask0)
+        crossover = mask_All.sum() / N
+
+        crossover_ijs = []
+        for ii, mask_ii in enumerate(mask_ij):
+            jj = ii + 1 if ii < self.nOdx-1 else 0
+            mask_jj = mask_ij[jj]
+            crossover_ij = (mask_ii & mask_jj).sum() / N 
+            crossover_ijs.append(crossover_ij)
+        crossover_ijs = np.array(crossover_ijs)
+            # print(f"{self.PhyLong[ii]}-{self.PhyLong[jj]} = {crossover_ij:.2f}")
+        return crossover, crossover_ijs
+
+    def get_crossMat(self, p_preds, plot=1):
+        Rs = p_preds.keys()
+        nR = len(Rs)
+        mat = np.zeros((nR, nR))
+        mat_ij = np.zeros((nR, nR, self.nOdx))
+
+        for ii, (R0, p_preds_R0) in enumerate(p_preds.items()):
+            for jj, (R1, p_preds_R0_R1) in enumerate(p_preds_R0.items()):
+                # if ii == jj:
+                #     CT[ii,jj] = 1 - self.get_contamination_R0_R1(R0, R1)
+                # else:
+                mat[ii][jj], mat_ij[ii][jj] = self.get_crossover_R0_R1(R0, p_preds_R0_R1)
+        RRs = [Util.DRR[R] for R in Rs]
+        if plot: PlotDNN.plot_heatmap(mat, RRs)
+        return mat_ij
+
+
+    @staticmethod
+    def plot_heatmap(mat, RRs, vmax=0.5, ax=None):
+
+        if ax is None:
+            f, ax = plt.subplots(figsize=(6,5), facecolor="gray")
+        sns.heatmap(mat, vmax=vmax, ax=ax, annot=True, cmap="inferno")
+        ax.set_xticklabels(RRs)
+        ax.set_yticklabels(RRs)
+        ax.set_title("Crossover Heatmap")

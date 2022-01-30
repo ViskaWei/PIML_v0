@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from tensorflow.python.ops.gen_dataset_ops import prefetch_dataset
 from tqdm import tqdm
 
-from PIML.nn.dnn.model.noisednn import NoiseDNN
+from PIML.nn.dnn.model.nzdnn import NzDNN
 from PIML.util.util import Util
 
 
@@ -97,11 +97,13 @@ class dnnWR(BaseBox):
 
         return prepare_trainset, prepare_testset, prepare_noiseset
 
-    def prepare_model(self, mtype="DNN", train_NL=None, nTrain=1000, nTest=100):
+    def prepare_model(self, mtype="DNN", train_NL=None, tb=0, nTrain=1000, nTest=100):
         NN = BaseNN()
         self.train_NL = train_NL
         NN.set_model(mtype, noise_level=train_NL, eigv=self.eigv)
         NN.set_model_shape(self.nFtr, self.nOdx)
+        if tb:
+            self.log_path =NN.set_tensorboard(verbose=1)
         self.dnn = NN.cls
 
         
