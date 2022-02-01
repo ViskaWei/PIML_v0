@@ -12,8 +12,6 @@ def main():
     # Rs=["C"]
     # Rs=["G"]
 
-
-
     Res=5000
     step=10
     d.init_box(W,Rs, Res,step, topk=10, onPCA=1, load_eigv=1)
@@ -29,7 +27,7 @@ def main():
         nTrain = 65536
         nTest = 1024
         mtype = "NzDNN"
-        train_NL = 10
+        train_NL = 30
         nEpoch = 1000
         batch = 16
 
