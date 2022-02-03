@@ -93,23 +93,30 @@ class BaseBox(Util):
                                                         c=BaseBox.DRC[self.R], RR=self.RR)
 
 # dataloader ------------------------------------------------------------------
-    def prepare_data_R(self, Res, R, step):
+    def prepare_data_R(self, Res, R, step, store=False):
         wave_H, flux_H, pdx, para = self.IO.load_bosz(Res, RR=BaseBox.DRR[R])
         pdx0 = pdx - pdx[0]
         wave_H, flux_H = self.get_flux_in_Wrange(wave_H, flux_H)
-        self.wave_H = wave_H
-        self.Mdx = Util.get_fdx_from_pmt(self.PhyMid, para)
-        self.flux_H = flux_H
-        self.flux_H0 = flux_H[self.Mdx]
+        
 
         wave, flux = Obs.resample(wave_H, flux_H, step)
-        self.flux0 = flux[self.Mdx]
 
         if self.wave is None: 
             self.wave = wave
         else:
             assert np.all(self.wave == wave)
-        self.init_obs(wave_H, step)
+
+        if store:
+            self.wave_H = wave_H
+            self.Mdx = Util.get_fdx_from_pmt(self.PhyMid, para)
+            self.flux_H = flux_H
+            self.flux_H0 = flux_H[self.Mdx]
+            self.flux0 = flux[self.Mdx]
+            self.init_obs(wave_H, step, flux_in_res=self.flux_H0)
+        else:
+            self.init_obs(wave_H, step, flux_in_res=None)
+
+
         return flux, pdx0, para
         
 #rbf ---------------------------------------------------------------------------
@@ -168,9 +175,9 @@ class BaseBox(Util):
         return logA, pcflux, v
 
 #Obs --------------------------------------------------------------------------
-    def init_obs(self, wave_H, step):
+    def init_obs(self, wave_H, step, flux_in_res=None):
         self.Obs = Obs()
-        self.Obs.init_sky(wave_H, step, flux_in_res=self.flux_H0)
+        self.Obs.init_sky(wave_H, step, flux_in_res=flux_in_res)
 
 
 

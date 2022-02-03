@@ -118,7 +118,7 @@ class DnnBoxW(BoxW):
         if self.log: model.save_model()
             
 
-    def test(self, test_NL=None, nTest=100, pmts=None, new=False):
+    def test(self, test_NL=None, nTest=100, pmts=None, new=True):
         self.nTest = nTest
         self.test_NL = test_NL
         self.nnRs = list(self.nn.keys())

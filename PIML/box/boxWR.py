@@ -34,7 +34,7 @@ class BoxWR(BaseBox):
         self.init_R(R)
         self.init_plot_R()
         self.Res = Res
-        self.flux, self.pdx0, self.para = self.prepare_data_R(Res, R, step)
+        self.flux, self.pdx0, self.para = self.prepare_data_R(Res, R, step, store=True)
         self.run_step_rbf(onPCA, topk)
 
         self.test_rbf(self.PhyMid, axis=1)

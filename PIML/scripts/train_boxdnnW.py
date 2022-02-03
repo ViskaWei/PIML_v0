@@ -4,13 +4,13 @@ def main():
     d = DnnBoxW()
     Res = 5000
     W="RedM"
-    Rs=["R"]
+    # Rs=["R"]
 
     # Rs=["B"]
     # Rs=["M"]
     # Rs=["W"]
     # Rs=["C"]
-    # Rs=["G"]
+    Rs=["G"]
 
     Res=5000
     step=10
@@ -26,8 +26,8 @@ def main():
     else:
         nTrain = 65536
         mtype = "NzDNN"
-        train_NL = 10
-        nEpoch = 1000
+        train_NL = 100
+        nEpoch = 500
         batch = 16
 
     d.init_train(out_idx=[0,1,2], mtype=mtype, train_NL=train_NL, nTrain=nTrain, log=1, name=name)
