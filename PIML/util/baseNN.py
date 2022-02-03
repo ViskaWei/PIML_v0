@@ -35,21 +35,13 @@ class BaseNN(Constants):
         log_path=self.cls.set_tensorboard(self.log_dir, name, verbose)
         logging.info("Tensorboard log path: {}".format(log_path))
 
-
-
-
-
-
     def prepare_DNN(self, input_dim, output_dim, lr=0.01, dp=0.0):
         self.cls.set_model_shape(input_dim, output_dim)
         self.cls.set_model_param(lr=lr, dp=dp, loss='mse', opt='adam', name='')
         self.cls.build_model()
 
-
-
     def add_noise(self, x, noise):
         return x + noise
-
 
     def build_model(self):
         self.cls.build_model()

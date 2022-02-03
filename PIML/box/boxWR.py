@@ -147,9 +147,9 @@ class BoxWR(BaseBox):
         if N == 1: obsfluxs = obsfluxs[0]
         return obsfluxs, obsvar
 
-    def estimate_snr(self, NL):
-        obsfluxH0, _ = self.Obs.add_obs_to_flux(self.fluxH0, NL, step=0)
-        bosz_5000_snr_factor = np.sqrt(2)
+    def estimate_snr(self, flux, NL, step):
+        obsfluxH0, _ = self.Obs.add_obs_to_flux(flux, NL, step=step)
+        bosz_5000_snr_factor = np.sqrt(2) # sqrt(10000 / 5000)
         snr = Util.get_snr(obsfluxH0) / bosz_5000_snr_factor
         return snr
 

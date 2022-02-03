@@ -36,9 +36,10 @@ class DnnBoxW(BoxW):
         self.x_test = None
         self.test_NL = None
         self.p_pred = {}
+        self.name= None
 
 
-    def init_train(self, out_idx=[0,1,2], mtype="DNN", log=1, train_NL=None, nTrain=1000):
+    def init_train(self, out_idx=[0,1,2], mtype="DNN", log=1, train_NL=None, nTrain=1000, name=""):
         self.odx  = out_idx
         self.nOdx = len(out_idx)
         self.PhyLong =  [BoxW.PhyLong[odx_i] for odx_i in self.odx]
@@ -47,7 +48,9 @@ class DnnBoxW(BoxW):
         self.train_NL = train_NL
         self.nTrain = nTrain
         self.log=log
+        self.name = name
         self.init_eval()
+
 
     def load_train(self, model_names, out_idx=[0,1,2], topk=10):
         self.topk = topk
@@ -56,6 +59,7 @@ class DnnBoxW(BoxW):
         self.PhyLong =  [BoxW.PhyLong[odx_i] for odx_i in self.odx]
         self.setup_scalers(out_idx)
         self.load_eigv(self.topk, stack=1)
+        if isinstance(model_names, str): model_names = [model_names]
         for model_name in model_names:
             self.set_model_R0(model_name)
         self.init_eval()
@@ -82,7 +86,8 @@ class DnnBoxW(BoxW):
         NN.set_model_shape(self.nFtr, self.nOdx)
         NN.set_model_param(lr=lr, dp=dp, loss='mse', opt='adam')
         if self.log: 
-            name = R0 if nEpoch is None else R0+"_ep"+str(nEpoch) +"_"
+            nameR = R0 if nEpoch is None else R0+"_ep"+str(nEpoch) +"_"
+            name = nameR + self.name + "_"
             NN.set_tensorboard(name=name, verbose=1)
         NN.build_model()
         return NN.cls
@@ -157,7 +162,8 @@ class DnnBoxW(BoxW):
 
     def eval(self, p_pred, p_test, vertical=0):
         self.eval_acc(p_pred, p_test, vertical=vertical)
-        self.eval_box(p_pred)
+        if len(p_pred) > 1: 
+            self.eval_cross(p_pred)
 
     def eval_acc(self, p_pred, p_test, vertical=False):
         for R0 in p_pred.keys():
@@ -171,12 +177,12 @@ class DnnBoxW(BoxW):
         else:
             f.suptitle(f"SNR = {snr:.2f}")
 
-    def eval_box(self, p_pred, n_box=1, snr=None):
+    def eval_cross(self, p_pred, n_box=1, snr=None):
         crossMat = self.PLT.get_crossMat(p_pred)
         for R0 in self.nnRs:
-            self.eval_box_R0(R0, crossMat=crossMat, n_box=n_box, snr=snr)
+            self.eval_cross_R0(R0, crossMat=crossMat, n_box=n_box, snr=snr)
 
-    def eval_box_R0(self, R0, crossMat=None, n_box=0.2, snr=None):
+    def eval_cross_R0(self, R0, crossMat=None, n_box=0.2, snr=None):
         fns = []
         if crossMat is not None:
             R0_idx = self.nnRs.index(R0)
@@ -190,6 +196,15 @@ class DnnBoxW(BoxW):
             f.suptitle(f"NL = {self.test_NL}")
         else:
             f.suptitle(f"SNR = {snr:.2f}")
+
+    def eval_traj(self, R0, p_pred, n_box=0.1):
+        fns = []
+        # BoxW.DRC[R0]
+        fns = fns + [self.PLT.line_fn(p_pred, c="r", lgd=None)]
+
+        f = self.PLT.plot_box_R0(R0, fns = fns, n_box=n_box)
+
+
 
 
 

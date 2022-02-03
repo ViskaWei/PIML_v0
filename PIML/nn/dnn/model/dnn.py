@@ -144,6 +144,7 @@ class DNN(object):
         x = self.input
         for ii, unit in enumerate(self.units[1:]):
             name = 'l' + str(ii)
+            dp = 0 if ii == 0 else self.dp
             x = self.add_dense_layer(unit, dp_rate=self.dp, reg1=self.reg1, name=name)(x)
         self.model = keras.Model(self.input, x, name="dnn")
 
@@ -165,9 +166,9 @@ class DNN(object):
             kl1 = None
 
         layer = ks([kl.Dense(unit, kernel_regularizer=kl1, name=name),
-                    # kl.BatchNormalization(),
+                    kl.Dropout(dp_rate),
                     kl.LeakyReLU(),
-                    kl.Dropout(dp_rate)
+                    kl.BatchNormalization(),
                     # keras.activations.tanh()
                     ])
         return layer

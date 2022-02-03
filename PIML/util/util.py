@@ -45,6 +45,7 @@ class Util(Constants):
             z = z.replace('p','m')
         return z
     
+    
 #random sample-------------------------------------------------------
     @staticmethod
     def get_random_uniform(nPmt, nPara, scaler=None, method="halton"):
@@ -91,8 +92,8 @@ class Util(Constants):
         #--------------------------------------------------
         s1 = np.median(flux)
         s2 = np.abs(2*flux-sp.ndimage.shift(flux,2)-sp.ndimage.shift(flux,-2))
-        n1 = 1.482602/np.sqrt(6.0)*np.median(s2)
-        sn = s1/n1
+        n1 = 1.482602 / np.sqrt(6.0)* np.median(s2)
+        sn = s1 / n1
         return sn
 
     # def get_random_pmt(self, N_pmt):

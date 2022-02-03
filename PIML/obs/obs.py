@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import scipy as sp
 import matplotlib.pyplot as plt
@@ -12,18 +13,24 @@ class Obs(BaseSpec):
         self.sky_H = None
         self.sky_in_res = None
         
-    
+    def init_sky(self, wave_H, step, flux_in_res=None):
+        self.prepare_sky(wave_H, step)
+        if flux_in_res is not None:
+            self.prepare_snr(flux_in_res)
+
     def prepare_sky(self, wave, step):
         self.sky_H = self.init_sky_grid(wave)
         self.step = step
         self.sky_in_res = BaseSpec.resampleFlux_i(self.sky_H, step)
     
     def prepare_snr(self, flux_in_res):
-        self.noise_level_grid = [2,5,10,20,30,40,50,100,200,500,800]
+        self.noise_level_grid = [0,10,20,30,40,50,100,200]
         # self.snrList = [11,22,33,55,110]
         self.snrList = [10, 20, 30, 50]
-        snr2nl = self.get_snr2nl_fn(flux_in_res, self.step)
+
+        snr2nl = self.get_snr2nl_fn(flux_in_res)
         self.nlList = snr2nl(self.snrList)
+        logging.info(f"nlList: {self.nlList}")
 
     @staticmethod
     def get_sky_interp_fn(skyOG):
@@ -95,26 +102,36 @@ class Obs(BaseSpec):
             return Util.get_snr(fluxs)
 
 
-    def get_snr2nl_fn(self, flux_in_res, step):
+    def get_snr2nl_fn(self, flux_in_res):
         #-----------------------------------------
         # choose the noise levels so that the S/N 
         # comes at around the predetermined levels
         #-----------------------------------------
-        # self.noise_level_grid = [2,5,10,20,30,40,50,100,200]
+        
+        flux_shape = flux_in_res.shape[-1]
+        if flux_shape == self.sky_in_res.shape[0]:
+            step = self.step
+            sky = self.sky_in_res
+        elif flux_shape == self.sky_H.shape[0]:
+            step = 0
+            sky = self.sky_H
+        else:
+            raise ValueError("flux_in_res and sky_in_res should have the same shape")
 
-        var_in_res = Obs.get_var(flux_in_res, self.sky_in_res, step=step)
+        var_in_res = Obs.get_var(flux_in_res, sky, step=step)
         noise      = Obs.get_noise(var_in_res)
 
         SN = []
         for noise_level in self.noise_level_grid:
             ssobs = flux_in_res + noise_level * noise
-            sn    = Util.get_snr(ssobs)
+            sn    = Util.get_snr(ssobs) / np.sqrt(2) # bosz R5000 = R10000, R = np.sqrt(10000/5000)
+            if step > 1: sn = sn / np.sqrt(step) # getting snr at inst. resolution
             SN.append(sn)
-        print("snr2nl-SN", SN)
+        logging.info(f"snr2nl-SN: {SN}")
         f = sp.interpolate.interp1d(SN, self.noise_level_grid, fill_value=0)
         return f
 
-    
+
     @staticmethod
     def get_var(ssm, skym, step=1):
         #--------------------------------------------
@@ -124,9 +141,11 @@ class Obs(BaseSpec):
         # This variance is still scaled with an additional
         # factor when we simuate an observation.
         #--------------------------------------------
+        assert ssm.shape[-1] == skym.shape[0]
         BETA  = 10.0
         VREAD = 16000
         varm  = ssm + BETA*skym + VREAD
+        # return varm
         if step <= 1: 
             return varm
         else:

@@ -1,5 +1,7 @@
+import logging
 import numpy as np
 import scipy as sp
+
 
 from .util import Util
 
@@ -143,9 +145,17 @@ class BaseSpec(object):
     @staticmethod
     def print_res(wave):
         dw = np.mean(np.diff(np.log(wave)))
-        print(f"#{len(wave)} R={1/dw:.2f}")
+        logging.info(f"#{len(wave)} R={1/dw:.2f}")
 
 # --------------------------------------------------------------------------------- 
+    @staticmethod
+    def shiftSpec(flux, rv):
+        #--------------------------------------------------
+        # The radial velocity rv is given in km/sec units
+        # This must be done at the hirez pixel resolution
+        #--------------------------------------------------
+        return sp.ndimage.shift(flux, rv/3.0)
+
 # ---------------------------------------------------------------------------------
     @staticmethod
     def get_bnd_from_para(para):

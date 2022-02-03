@@ -123,6 +123,17 @@ class BasePlot(object):
         return fn
 
     @staticmethod
+    def line_fn(data, c=None, lgd=None):
+        def fn(i, j, ax, handles=[]):
+            print(data[:,i], data[:,j])
+            ax.plot(data[:,i], data[:,j], marker="o", c=c)
+            if lgd is not None:
+                lgd0 = lgd[i] if isinstance(lgd, (list, np.ndarray)) else lgd
+                # handles.append(Line2D(label=lgd0, markerfacecolor=c, markersize=10))
+            return handles
+        return fn
+
+    @staticmethod
     def get_ellipse_params(pred, npdx=None):
         if npdx is None: npdx = pred.shape[1]
         x0s,y0s,s05s,degs = [],[],[],[]

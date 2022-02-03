@@ -97,7 +97,14 @@ class BaseBox(Util):
         wave_H, flux_H, pdx, para = self.IO.load_bosz(Res, RR=BaseBox.DRR[R])
         pdx0 = pdx - pdx[0]
         wave_H, flux_H = self.get_flux_in_Wrange(wave_H, flux_H)
+        self.wave_H = wave_H
+        self.Mdx = Util.get_fdx_from_pmt(self.PhyMid, para)
+        self.flux_H = flux_H
+        self.flux_H0 = flux_H[self.Mdx]
+
         wave, flux = Obs.resample(wave_H, flux_H, step)
+        self.flux0 = flux[self.Mdx]
+
         if self.wave is None: 
             self.wave = wave
         else:
@@ -163,12 +170,9 @@ class BaseBox(Util):
 #Obs --------------------------------------------------------------------------
     def init_obs(self, wave_H, step):
         self.Obs = Obs()
-        self.init_sky(wave_H, step)
+        self.Obs.init_sky(wave_H, step, flux_in_res=self.flux_H0)
 
-    def init_sky(self, wave_H, step, flux0=None):
-        self.Obs.prepare_sky(wave_H, step)
-        if flux0 is not None:
-            self.Obs.prepare_snr(flux0)
+
 
 # static ----------------------------------------------------------------------
     @staticmethod
