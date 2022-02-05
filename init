@@ -19,6 +19,9 @@ export TF_CPP_MIN_LOG_LEVEL=2
 # Enable more cores for numexpr
 export NUMEXPR_MAX_THREADS=32
 
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CONDA_PREFIX/lib
+
+
 
 cd $ROOT
 
