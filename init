@@ -3,7 +3,7 @@
 source ~/.bashrc
 
 # Where's my Python
-source /datascope/slurm/miniconda3/bin/activate ae-tf
+source /datascope/slurm/miniconda3/bin/activate viska-tf28
 export PYTHONPATH=.:../pysynphot:../SciScript-Python/py3
 
 # Where's my PFS 

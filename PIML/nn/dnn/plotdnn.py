@@ -1,6 +1,4 @@
 import numpy as np
-from tqdm import tqdm
-from PIML.util.basebox import BaseBox
 from PIML.util.baseplot import BasePlot
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Ellipse, Patch

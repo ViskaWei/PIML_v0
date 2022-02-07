@@ -56,15 +56,16 @@ class BoxWR(BaseBox):
 
 
 #RBF------------------------------------------------------------------------
-    def run_step_rbf(self, onPCA, topk):
+    def run_step_rbf(self, onPCA, topk, fast=False):
         self.onPCA = onPCA
         self.topk = topk
 
         if self.onPCA:
-            self.eigv, self.pcflux, fns = self.prepare_rbf(self.pdx0, self.pmt2pdx_scaler, self.flux, onPCA=onPCA, Obs=self.Obs)
-            self.interp_flux_fn, self.rbf_ak, self.rbf_sigma, self.interp_bias_fn = fns
+            self.eigv0, self.pcflux, fns = self.prepare_rbf(self.pdx0, self.pmt2pdx_scaler, self.flux, onPCA=onPCA, Obs=self.Obs, topk=topk, fast=fast)
+            self.eigv = self.eigv0[:topk]
+            self.rbf_flux, self.rbf_ak, _, self.rbf_ak_sigma, _, self.interp_bias_fn = fns
         else:
-            self.interp_flux_fn, self.rbf_sigma, self.interp_bias_fn = self.prepare_rbf(self.pdx0, self.pmt2pdx_scaler, self.flux, onPCA=onPCA, Obs=self.Obs)
+            self.rbf_flux, self.rbf_sigma, self.interp_bias_fn = self.prepare_rbf(self.pdx0, self.pmt2pdx_scaler, self.flux, onPCA=onPCA, Obs=self.Obs)
 
 
     def test_rbf(self, pmt1, pmt2=None, axis=1, pmt=None):
@@ -73,7 +74,7 @@ class BoxWR(BaseBox):
             pmt2[axis] += BaseBox.PhyTick[axis]
         flux1, flux2 = self.get_model(pmt1,onGrid=1),  self.get_model(pmt2,onGrid=1)
         if pmt is None: pmt = 0.5 * (pmt1 + pmt2)
-        interpFlux = self.interp_flux_fn(pmt, log=0, dotA=1)
+        interpFlux = self.rbf_flux(pmt, log=0, dotA=1)
         plt.plot(self.wave, interpFlux, label= pmt)
         plt.plot(self.wave, flux1, label = pmt1)
         plt.plot(self.wave, flux2, label = pmt2)
@@ -82,7 +83,7 @@ class BoxWR(BaseBox):
 # model------------------------------------------------------------------------
     def get_model(self, pmt, norm=0, onGrid=0, plot=0):
         if norm:
-            model= self.interp_flux_fn(pmt, log=0, dotA=0)
+            model= self.rbf_flux(pmt, log=0, dotA=0)
             if plot: BasePlot.plot_spec(self.wave, model, pmt=pmt)
             return model
         else:
@@ -90,7 +91,7 @@ class BoxWR(BaseBox):
                 fdx = Util.get_fdx_from_pmt(pmt, self.para)
                 Amodel = self.flux[fdx]
             else:
-                Amodel = self.interp_flux_fn(pmt, log=0, dotA=1)
+                Amodel = self.rbf_flux(pmt, log=0, dotA=1)
             if plot: BasePlot.plot_spec(self.wave, Amodel, pmt=pmt)
             return Amodel
     
@@ -164,7 +165,7 @@ class BoxWR(BaseBox):
                 noise_level= self.Obs.snr2nl(snr)
         obsfluxs, obsvar = self.make_obs_from_pmt(pmt, noise_level=noise_level,snr=snr, N=N, onPCA=1, plot=0)
         obssigma = np.sqrt(obsvar)
-        AModel = self.interp_flux_fn(pmt, log=0, dotA=1)
+        AModel = self.rbf_flux(pmt, log=0, dotA=1)
         nu = (obsfluxs - AModel)
         bk = np.log(obsfluxs).dot(self.eigv.T)
         X = nu / obssigma
@@ -354,44 +355,39 @@ class BoxWR(BaseBox):
 
 
 #DNN-----------------------------------------------------------------------------------------------------------------------
-    def prepare_trainset(self, N, pmts=None, noise_level=1, add_noise=False):
+    def prepare_trainset(self, N, pmts=None, noise_level=1, add_noise=False, topk=None):
         if pmts is None: 
             pmts = self.get_random_pmt(N, method="random")
         else:
             pmts = pmts[:N]
-        aks = self.rbf_ak(pmts)
-
-        if add_noise:
-            if noise_level <=1:
-                return aks, pmts
+        if noise_level <1:
+            aks = self.rbf_ak(pmts, topk=topk)
+            out = aks if add_noise else [aks, np.zeros_like(aks)]
+        else:
+            if add_noise:
+                out = self.aug_ak_for_pmts(pmts, noise_level, topk=topk)
             else:
-                sigma = self.rbf_sigma(pmts, noise_level) 
-                noiseMat = np.random.normal(0, sigma, sigma.shape)
-                noisePC = noiseMat.dot(self.eigv.T) # convert noise into topk PC basis
-                bks = aks + noisePC  
-                return bks, pmts
-        else:
-            if noise_level <=1:
-                return [aks, np.zeros_like(aks)], pmts
-            else:
-                sigma = self.rbf_sigma(pmts, 1) #noise_level =1 for now, will be add dynamically to NN later   
-                return [aks, sigma], pmts
+                out = self.rbf_ak_sigma(pmts, topk=topk)
+        return out, pmts
 
-    def prepare_testset(self, N, pmts=None, noise_level=1, seed=None):
-        if pmts is None: 
-            pmts = self.get_random_pmt(N, method="random")
+
+    def prepare_testset(self, N, pmts=None, noise_level=1, topk=None, seed=None):
+        pmts = self.get_random_pmt(N, method="random") if pmts is None else pmts[:N]
+        if noise_level <1: 
+            out = self.rbf_ak(pmts, topk=topk)
         else:
-            pmts = pmts[:N]
-        aks = self.rbf_ak(pmts)
-        if noise_level <=1:
-            return aks, pmts
-        else:
-            sigma = self.rbf_sigma(pmts, noise_level)
-            if seed is not None: np.random.seed(seed)
-            noiseMat = np.random.normal(0, sigma, sigma.shape)
-            noisePC = noiseMat.dot(self.eigv.T) # convert noise into topk PC basis
-            bks = aks + noisePC
-            return bks, pmts
+            out = self.aug_ak_for_pmts(pmts, noise_level, topk=topk, seed=seed)
+        return out, pmts
+
+    def aug_ak_for_pmts(self, pmts, noise_level, topk=None, seed=None):
+        aks, sigma = self.rbf_ak_sigma(pmts, topk=topk)
+        if seed is not None: np.random.seed(seed)
+        sigma = sigma * noise_level
+        noiseMat = np.random.normal(0, sigma, sigma.shape)
+        eigv = self.eigv[:topk]
+        noisePC = noiseMat.dot(eigv.T) # convert noise into topk PC basis
+        bks = aks + noisePC
+        return bks
 
     def prepare_noiseset(self, pmt, noise_level, nObs):
         ak0 = self.rbf_ak(pmt)
@@ -399,6 +395,7 @@ class BoxWR(BaseBox):
         if noise_level <=1: 
             return ak
         else:
+            #FIX ME: use gen_nObs_noise
             sigma0 = self.rbf_sigma(pmt, noise_level)
             sigma = np.tile(sigma0, (nObs, 1))
             noiseMat = np.random.normal(0, sigma, sigma.shape)

@@ -1,12 +1,9 @@
 import os
-from tabnanny import verbose
 import numpy as np
 import pandas as pd
 import logging
-# import signal
 import h5py
 import datetime
-# from datetime import datetime
 import tensorflow as tf
 from tensorflow import keras
 import tensorflow.keras.layers as kl
@@ -17,25 +14,28 @@ from tensorflow.keras import optimizers as ko
 from tensorflow.keras.metrics import MeanSquaredError, RootMeanSquaredError
 
 from tensorflow.keras.callbacks import Callback, EarlyStopping, ModelCheckpoint, TensorBoard, ReduceLROnPlateau
-import matplotlib.pyplot as plt
 
 import warnings
 warnings.filterwarnings("ignore")
-# import tensorflow.python.keras.optimizer_v2 as ko
+logging.getLogger('tensorflow').setLevel(logging.FATAL)
 
+os.environ["CUDA_VISIBLE_DEVICES"]="0,1,2,3"
+
+import tensorflow as tf
+logging.info(tf.config.list_physical_devices('GPU'))
 
 
 class DNN(object):
     def __init__(self):
         # super(Autoencoder, self).__init__()
-        # model shape
+        # ------------model shape----------------
         self.input_dim = None
         self.output_dim = None
         self.hidden_dims = None
         self.input = None
         self.output = None
         self.units = None
-        # model param
+        # ------------model param----------------
         self.model = None
         self.reg1 = None
         self.dp = None
@@ -67,8 +67,6 @@ class DNN(object):
         self.callbacks.append([
             # EarlyStopping(monitor='loss', patience=10),
             ReduceLROnPlateau('loss',patience=20, min_lr=0.0001, factor=0.3),
-            # TensorBoard(log_dir=self.log_dir)
-            # TensorBoard(log_dir=self.log_dir, histogram_freq=1)
         ])
 
     def set_tensorboard(self, log_dir, name="", verbose=1):
@@ -96,10 +94,7 @@ class DNN(object):
         out_name = name + out_name + t
         return out_name.replace('.', '')
 
-
-    # def run(self, x_train, y_train, x_test, y_test, )
-
-    def _predict(self, x_test):
+    def scale_predict(self, x_test):
         y_pred = self.model.predict(x_test)
         return self.nn_rescaler(y_pred)
 

@@ -120,11 +120,12 @@ class BaseBox(Util):
         return flux, pdx0, para
         
 #rbf ---------------------------------------------------------------------------
-    def prepare_rbf(self, coord, coord_scaler, flux, onPCA=1, Obs=None):
+    def prepare_rbf(self, coord, coord_scaler, flux, onPCA=1, Obs=None, topk=None, fast=False):
         logflux = Util.safe_log(flux)
         rbf = RBF(coord=coord, coord_scaler=coord_scaler)
         if onPCA:
-            logA, pcflux, eigv = self.prepare_pca(logflux, top=self.topk)
+            top = topk if fast else None
+            logA, pcflux, eigv = self.prepare_pca(logflux, top=top)
             rbf_flux, rbf_logA, rbf_ak = rbf.build_PC_rbf_interp(logA, pcflux, eigv)
             if Obs is None: return eigv, pcflux, [rbf_flux, rbf_ak, None, None] 
         else:
@@ -132,13 +133,28 @@ class BaseBox(Util):
             if Obs is None: return rbf_flux, None, None
 
         def rbf_sigma(pmt, noise_level, divide=0):
-            AModel = rbf_flux(pmt, log=0, dotA=1)
+            AModel = rbf_flux(pmt, log=0, dotA=1, outA=0)
             sigma = Obs.get_sigma_in_res(AModel, noise_level)
             if divide:
                 # divide for bias in ak
                 return np.divide(sigma, AModel)
             else:
                 return sigma
+
+        def rbf_ak_sigma(pmt, topk=None):
+            ak, AModel = rbf_flux(pmt, log=0, dotA=1, outA=1)
+            sigma = Obs.get_sigma_in_res(AModel, 1) # noise level = 1
+            sigma_log = np.divide(sigma, AModel)
+            return [ak[...,:topk], sigma_log]
+
+        def rbf_flux_sigma(pmt):
+            logModel = rbf_flux(pmt, log=1, dotA=0, outA=0)
+            logAModel = rbf_logA(pmt, log=1) + logModel
+            AModel = np.exp(logAModel)
+            sigma = Obs.get_sigma_in_res(AModel, 1) # noise level = 1
+            sigma_log = np.divide(sigma, AModel) # valid for NL <= 100
+            return [logModel, sigma_log]
+
 
         def gen_nObs_noise(sigma_ak, nObs=1):
             if nObs > 1:
@@ -150,12 +166,13 @@ class BaseBox(Util):
                 return noise
         
         if onPCA:
-            return eigv, pcflux, [rbf_flux, rbf_ak, rbf_sigma, gen_nObs_noise]
+            return eigv, pcflux, [rbf_flux, rbf_ak, rbf_sigma, rbf_ak_sigma, rbf_flux_sigma, gen_nObs_noise]
         else:
             return rbf_flux, rbf_sigma, gen_nObs_noise
 
 # PCA --------------------------------------------------------------------------
-    def prepare_pca(self, logfluxs, top=10):
+    def prepare_pca(self, logfluxs, top=None):
+        nPix = logfluxs.shape[1]
         logA = np.mean(logfluxs, axis=1)
         lognormModels = logfluxs - logA[:, None]
         u,s,v = np.linalg.svd(lognormModels, full_matrices=False)
@@ -165,13 +182,14 @@ class BaseBox(Util):
             u = u[:, :top]
             s = s[:top]
             v = v[:top]
-            self.topk = len(v)
-        logging.info(f"Top eigs {s.round(2)}")
-        assert abs(np.mean(np.sum(v.dot(v.T), axis=0)) -1) < 1e-5
-        assert abs(np.sum(v, axis=1).mean()) < 0.1
-        
+            self.pcaDim = len(v)
+        nS = len(s)
+        logging.info(f"Top #{nS} eigs {s[:10].round(2)}")
+        assert np.allclose(v.dot(v.T), np.eye(nS))
+        assert np.allclose(np.sum(v[:-1], axis=1), np.zeros(nS-1)) 
+
         pcflux = u * s
-        assert (lognormModels.dot(v.T) - pcflux).max() < 1e-5
+        assert np.allclose(lognormModels.dot(v.T), pcflux)
         return logA, pcflux, v
 
 #Obs --------------------------------------------------------------------------
