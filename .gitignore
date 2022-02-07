@@ -120,3 +120,6 @@ datasets/
 *trained_model
 *.out
 *models
+*.pb
+__pycache__
+.pyc

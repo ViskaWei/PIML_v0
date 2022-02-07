@@ -52,7 +52,7 @@ class EvalBoxW(TrainBoxW):
     def set_scale_predict_R0(self, R0):
         self.nn[R0].nn_rescaler = lambda x: self.rescale(x, R0)
 
-    def test(self, test_NL=None, nTest=100, pmts=None, new=True):
+    def test(self, test_NL=None, nTest=100, pmts=None, new=True, seed=922):
         self.nTest = nTest
         self.test_NL = test_NL
         self.nnRs = list(self.nn.keys())
@@ -61,7 +61,7 @@ class EvalBoxW(TrainBoxW):
             [self.set_scale_predict_R0(R0) for R0 in self.nnRs]
 
         if self.x_test is None or new:
-            self.x_test, self.p_test = self.prepare_testset(self.nTest, pmts=pmts, noise_level=test_NL, seed=922, odx=self.odx)
+            self.x_test, self.p_test = self.prepare_testset(self.nTest, pmts=pmts, noise_level=test_NL, seed=seed, odx=self.odx)
         
         for R0 in self.nnRs:
             self.p_pred[R0] = self.test_R0(R0, self.x_test) 
@@ -106,6 +106,7 @@ class EvalBoxW(TrainBoxW):
         #     self.test(test_NL=self.train_NL, nTest=100)
 
     def eval(self, p_pred, p_test, vertical=0):
+        print(self.model_names)
         self.eval_acc(p_pred, p_test, vertical=vertical)
         if len(p_pred) > 1: 
             self.eval_cross(p_pred)

@@ -65,15 +65,16 @@ class DNN(object):
         self.loss = loss
         # self.log_dir = "logs/fit/" + self.name        
         self.callbacks.append([
-            # EarlyStopping(monitor='loss', patience=10),
-            ReduceLROnPlateau('loss',patience=20, min_lr=0.0001, factor=0.3),
+            EarlyStopping(monitor='loss', patience=40),
+            ReduceLROnPlateau('loss',patience=8, min_lr=0.000001, factor=0.6),
         ])
 
     def set_tensorboard(self, log_dir, name="", verbose=1):
         self.name = self.get_model_name(name)
         log_path = os.path.join(log_dir, self.name)        
         self.callbacks.append([
-            TensorBoard(log_dir=log_path, histogram_freq=verbose)
+            TensorBoard(log_dir=log_path, histogram_freq=verbose),
+            ModelCheckpoint(self.name, save_best_only=True, monitor='val_loss', mode='min')
         ])
         return log_path
 
@@ -121,8 +122,14 @@ class DNN(object):
 
     def get_units(self):
         if self.hidden_dims.size == 0:
-            if self.input_dim <= 150:
-                hidden_dims = np.array([128, 64, 32, 16])
+            if self.input_dim <= 1000:
+                # hidden_dims = np.array([128, 64, 32, 16])
+                # hidden_dims = np.array([512, 256, 128, 64, 32, 16])
+                # hidden_dims = np.array([1024, 512, 256, 128, 64, 32, 16])
+                hidden_dims = np.array([2048, 1024, 512, 256, 128, 64, 32, 16])
+
+                
+                
 
                 # hidden_dims = np.array([128, 64, 32])
             elif self.input_dim < 2048:
