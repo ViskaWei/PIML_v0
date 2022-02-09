@@ -1,8 +1,6 @@
 import logging
 import numpy as np
 import scipy as sp
-
-
 from .util import Util
 
 class BaseSpec(object):
@@ -19,12 +17,12 @@ class BaseSpec(object):
         return Ws
 
     @staticmethod
-    def _get_flux_in_Wrange(wave, flux, Ws):
+    def _get_flux_in_Wrng(wave, flux, Ws):
         start = np.digitize(Ws[0], wave)
         end = np.digitize(Ws[1], wave)
         return wave[start:end], flux[:, start:end]
 
-
+#TODO: add  convolve feature
 
 # log norm --------------------------------------------------------------
 

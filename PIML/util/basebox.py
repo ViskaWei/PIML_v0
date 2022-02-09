@@ -3,7 +3,10 @@ import pandas as pd
 import logging
 from .util import Util
 from .baseplot import BasePlot
+from .basespec import BaseSpec
 from PIML.obs.obs import Obs
+from PIML.obs.obsW import ObsW
+
 from PIML.method.rbf import RBF
 
 
@@ -14,29 +17,32 @@ class BaseBox(Util):
         super().__init__()
         self.PLT = BasePlot()
         self.onPCA = None
-        self.wave = None
 
 
 # init ------------------------------------------------------------------------
     def init_W(self, W):
         self.W = W
-        self.Ws = BaseBox.DWs[W]
+        self.WRng = BaseBox.DWs[W]
+        self.wave = None
 
-    def get_flux_in_Wrange(self, wave, flux):
-        return Obs._get_flux_in_Wrange(wave, flux, self.Ws)
+    def init_Ws(self, Ws):
+        if isinstance(Ws, str): Ws = [Ws]
+        self.Ws = Ws
+        self.DWs = {W: BaseBox.DWs[W] for W in Ws}
+        self.DWv = {}
+
+
+    def get_flux_in_Wrng_W(self, W, wave_H, flux_H):
+        return BaseSpec._get_flux_in_Wrng(wave_H, flux_H, BaseBox.DWs[W])
+
+    def get_flux_in_Wrng(self, wave, flux):
+        return BaseSpec._get_flux_in_Wrng(wave, flux, self.WRng)
 
     def init_WR(self, W, Rs):
         self.init_W(W)
         self.init_Rs(Rs)
 
-    # def init_WR(self, W, R):
-    #     self.init_W(W)
-    #     if isinstance(R, list):
-    #         self.init_Rs(R)
-    #     elif isinstance(R, str):
-    #         self.init_R(R)
-    #     else:
-    #         raise ValueError('R must be a string or a list of strings')
+
 
     def init_R(self, R):
         self.R = R
@@ -93,31 +99,48 @@ class BaseBox(Util):
                                                         c=BaseBox.DRC[self.R], RR=self.RR)
 
 # dataloader ------------------------------------------------------------------
-    def prepare_data_R(self, Res, R, step, store=False):
+    def prepare_data_R(self, W, R, Res, step, store=False):
         wave_H, flux_H, pdx, para = self.IO.load_bosz(Res, RR=BaseBox.DRR[R])
         pdx0 = pdx - pdx[0]
-        wave_H, flux_H = self.get_flux_in_Wrange(wave_H, flux_H)
-        
+        if store:
+            self.Mdx = Util.get_fdx_from_pmt(self.PhyMid, para)
+            self.DWv_H = {}
+            self.DFx_H = {}
+            self.DFx_H0 = {}
+            self.DFx0 = {}
 
-        wave, flux = Obs.resample(wave_H, flux_H, step)
+        for W in self.Ws:
+            wave_H, flux_H = self.get_flux_in_Wrng_W(W, wave_H, flux_H)
+            wave, flux = BaseSpec.resample(wave_H, flux_H, step)
+            self.DWv[W] = wave
+            if store:
+                self.DWv_H[W] = wave_H
+                self.DFx_H[W] = flux_H
+                self.DFx_H0[W] = flux_H[self.Mdx]
+                self.DFx0[W] = flux[self.Mdx]
+                self.Obs = self.init_obs(wave_H, step, flux_in_res=self.flux_H0)
+            else:
+                self.init_obs(wave_H, step, flux_in_res=None)
 
+    def prepare_data_WR(self, W, R, Res, step, store=False):
+        wave_H, flux_H, pdx, para = self.IO.load_bosz(Res, RR=BaseBox.DRR[R])
+        pdx0 = pdx - pdx[0]
+        wave_H, flux_H = self.get_flux_in_Wrng_W(W, wave_H, flux_H)
+        wave, flux = BaseSpec.resample(wave_H, flux_H, step)
         if self.wave is None: 
             self.wave = wave
         else:
             assert np.all(self.wave == wave)
-
         if store:
             self.wave_H = wave_H
             self.Mdx = Util.get_fdx_from_pmt(self.PhyMid, para)
             self.flux_H = flux_H
             self.flux_H0 = flux_H[self.Mdx]
             self.flux0 = flux[self.Mdx]
-            self.init_obs(wave_H, step, flux_in_res=self.flux_H0)
-        else:
-            self.init_obs(wave_H, step, flux_in_res=None)
-
-
-        return flux, pdx0, para
+            
+        flux_in_res = self.flux_H0 if store else None
+        Obs = self.init_obs_W(W, wave_H, step, flux_in_res=flux_in_res)
+        return flux, pdx0, para, Obs
         
 #rbf ---------------------------------------------------------------------------
     def prepare_rbf(self, coord, coord_scaler, flux, onPCA=1, Obs=None, topk=None, fast=False):
@@ -147,14 +170,21 @@ class BaseBox(Util):
             sigma_log = np.divide(sigma, AModel)
             return [ak[...,:topk], sigma_log]
 
-        def rbf_flux_sigma(pmt):
-            logModel = rbf_flux(pmt, log=1, dotA=0, outA=0)
-            logAModel = rbf_logA(pmt, log=1) + logModel
-            AModel = np.exp(logAModel)
-            sigma = Obs.get_sigma_in_res(AModel, 1) # noise level = 1
-            sigma_log = np.divide(sigma, AModel) # valid for NL <= 100
-            return [logModel, sigma_log]
-
+        if onPCA:
+            def rbf_flux_sigma(pmt):
+                logModel = rbf_flux(pmt, log=1, dotA=0, outA=0)
+                logAModel = rbf_logA(pmt, log=1) + logModel
+                AModel = np.exp(logAModel)
+                sigma = Obs.get_sigma_in_res(AModel, 1) # noise level = 1
+                sigma_log = np.divide(sigma, AModel) # valid for NL <= 100
+                return [logModel, sigma_log]
+        else:
+            def rbf_flux_sigma(pmt):
+                logModel = rbf_flux(pmt, log=1, dotA=1, outA=0)
+                Model = np.exp(logModel)
+                sigma = Obs.get_sigma_in_res(Model, 1) # noise level = 1
+                sigma_log = np.divide(sigma, Model) # valid for NL <= 100
+                return [logModel, sigma_log]
 
         def gen_nObs_noise(sigma_ak, nObs=1):
             if nObs > 1:
@@ -168,7 +198,7 @@ class BaseBox(Util):
         if onPCA:
             return eigv, pcflux, [rbf_flux, rbf_ak, rbf_sigma, rbf_ak_sigma, rbf_flux_sigma, gen_nObs_noise]
         else:
-            return rbf_flux, rbf_sigma, gen_nObs_noise
+            return rbf_flux, rbf_sigma, rbf_flux_sigma, gen_nObs_noise
 
 # PCA --------------------------------------------------------------------------
     def prepare_pca(self, logfluxs, top=None):
@@ -186,17 +216,42 @@ class BaseBox(Util):
         nS = len(s)
         logging.info(f"Top #{nS} eigs {s[:10].round(2)}")
         assert np.allclose(v.dot(v.T), np.eye(nS))
-        assert np.allclose(np.sum(v[:-1], axis=1), np.zeros(nS-1)) 
+        assert np.allclose(np.sum(v[:-1], axis=1).mean(), 0.0) 
 
         pcflux = u * s
         assert np.allclose(lognormModels.dot(v.T), pcflux)
         return logA, pcflux, v
 
 #Obs --------------------------------------------------------------------------
-    def init_obs(self, wave_H, step, flux_in_res=None):
-        self.Obs = Obs()
-        self.Obs.init_sky(wave_H, step, flux_in_res=flux_in_res)
+    #TODO: fix it
+    def init_obs_W(self, W, wave_H, step=None, flux_in_res=None):
+        Obs = ObsW(W, step)
+        Obs.init_W(wave_H, flux_in_res=flux_in_res)
+        return Obs
 
+    def init_obs(self):
+        pass
+
+# rand -------------------------------------------------------------------------
+
+    def get_random_pmts_R(self, R, nPmt, nPara=5, method="halton"):
+        rands = Util.get_random_uniform(nPmt, nPara, method=method, scaler=None)
+        pmts = self.minmax_rescaler[R](rands)
+        return rands, pmts
+
+    def get_random_pmts(self, nPmt, nPara=5, method="halton", out_rand=False):
+        rands = Util.get_random_uniform(nPmt, nPara, method=method)
+        pmts = self.minmax_rescaler(rands)
+        if out_rand: 
+            return rands, pmts
+        else:
+            return pmts
+
+    @staticmethod
+    def _get_random_pmt(PhyRng, PhyMin, N_pmt):
+        pmt0 = np.random.uniform(0,1,(N_pmt,5))
+        pmts = pmt0 * PhyRng + PhyMin   
+        return pmts
 
 
 # static ----------------------------------------------------------------------
@@ -300,12 +355,6 @@ class BaseBox(Util):
         RR = BaseBox.DRR[R]
         if save: Util.IO.save_bosz_box(Res, RR, wave, boxFlux, boxPdx, boxPara, overwrite=1)
         return boxFlux, boxPdx, boxPara
-
-    @staticmethod
-    def get_random_pmt(PhyRng, PhyMin, N_pmt):
-        pmt0 = np.random.uniform(0,1,(N_pmt,5))
-        pmts = pmt0 * PhyRng + PhyMin   
-        return pmts
 
 #collect ---------------------------------------------------------------
     @staticmethod

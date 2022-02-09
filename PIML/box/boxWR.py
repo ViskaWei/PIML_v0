@@ -1,8 +1,9 @@
-from multiprocessing.spawn import prepare
+from curses import nl
 import os
 import h5py
 import numpy as np
-from PIML import obs
+from tqdm import tqdm
+
 from PIML.util.basebox import BaseBox
 from PIML.util.baseplot import BasePlot
 
@@ -10,11 +11,9 @@ from PIML.method.llh import LLH
 from PIML.method.rbf import RBF
 from PIML.method.bias import Bias
 import matplotlib.pyplot as plt
-from tqdm import tqdm
 
 from PIML.util.util import Util
 
-# class testBoxWR(BoxWR):
 
 
 class BoxWR(BaseBox):
@@ -25,20 +24,18 @@ class BoxWR(BaseBox):
         self.topk = None
         self.Res = None
         
-
-
-
 # init------------------------------------------------------------------------
-    def init(self, W, R, Res, step, topk=10, onPCA=1):
+    def init(self, W, R, Res, step, topk=10, onPCA=1, fast=False):
         self.init_W(W)
         self.init_R(R)
         self.init_plot_R()
         self.Res = Res
-        self.flux, self.pdx0, self.para = self.prepare_data_R(Res, R, step, store=True)
-        self.run_step_rbf(onPCA, topk)
+        self.onPCA = onPCA
+        self.topk = topk
 
+        self.flux, self.pdx0, self.para, self.Obs = self.prepare_data_WR(W,R,Res,step,store=True)
+        self.run_step_rbf(fast=fast)
         self.test_rbf(self.PhyMid, axis=1)
-        self.init_LLH()
 
     def init_LLH(self): 
         self.LLH.get_model = lambda x: self.get_model(x, onGrid=0, plot=0)
@@ -50,22 +47,16 @@ class BoxWR(BaseBox):
         pmts = Util.get_random_grid_pmt(self.para, nPmt)
         return pmts
 
-    def get_random_pmt(self, nPmt, nPara=5, method="halton"):
-        pmts = Util.get_random_uniform(nPmt, nPara, method=method, scaler=self.minmax_rescaler)
-        return pmts
 
 
 #RBF------------------------------------------------------------------------
-    def run_step_rbf(self, onPCA, topk, fast=False):
-        self.onPCA = onPCA
-        self.topk = topk
-
+    def run_step_rbf(self, fast=False):
         if self.onPCA:
-            self.eigv0, self.pcflux, fns = self.prepare_rbf(self.pdx0, self.pmt2pdx_scaler, self.flux, onPCA=onPCA, Obs=self.Obs, topk=topk, fast=fast)
-            self.eigv = self.eigv0[:topk]
+            self.eigv0, self.pcflux, fns = self.prepare_rbf(self.pdx0, self.pmt2pdx_scaler, self.flux, onPCA=self.onPCA, Obs=self.Obs, topk=self.topk, fast=fast)
+            self.eigv = self.eigv0[:self.topk]
             self.rbf_flux, self.rbf_ak, _, self.rbf_ak_sigma, _, self.interp_bias_fn = fns
         else:
-            self.rbf_flux, self.rbf_sigma, self.interp_bias_fn = self.prepare_rbf(self.pdx0, self.pmt2pdx_scaler, self.flux, onPCA=onPCA, Obs=self.Obs)
+            self.rbf_flux, self.rbf_sigma, self.rbf_flux_sigma, self.interp_bias_fn = self.prepare_rbf(self.pdx0, self.pmt2pdx_scaler, self.flux, onPCA=self.onPCA, Obs=self.Obs)
 
 
     def test_rbf(self, pmt1, pmt2=None, axis=1, pmt=None):
@@ -105,7 +96,7 @@ class BoxWR(BaseBox):
 
     def get_bk_fns(self, noise_level, pmts=None, nPmts=1, out_bks=1):
         if pmts is None: 
-            pmts = self.get_random_pmt(nPmts)
+            pmts = self.get_random_pmts(nPmts)
         if out_bks:
             bks = np.zeros((pmts.shape[0], self.topk))
         bk_fns = []
@@ -126,7 +117,7 @@ class BoxWR(BaseBox):
         return bks
 
     def get_bks_nObs_from_pmt(self, pmt=None, noise_level=1, nObs=1):
-        if pmt is None: pmt = self.get_random_pmt(1)[0]
+        if pmt is None: pmt = self.get_random_pmts(1)[0]
         bk_fn = self.get_bk_fn_from_pmt(pmt, noise_level)
         bk_nObs = np.zeros((nObs, self.topk))
         for ii in range(nObs):
@@ -149,7 +140,7 @@ class BoxWR(BaseBox):
         return obsfluxs, obsvar
 
     def estimate_snr(self, flux, NL, step):
-        obsfluxH0, _ = self.Obs.add_obs_to_flux(flux, NL, step=step)
+        obsfluxH0,  = self.Obs.make_obsflux(flux, NL)
         bosz_5000_snr_factor = np.sqrt(2) # sqrt(10000 / 5000)
         snr = Util.get_snr(obsfluxH0) / bosz_5000_snr_factor
         return snr
@@ -285,7 +276,7 @@ class BoxWR(BaseBox):
 
 
     def eval_LLH_NL(self, noise_level=None, pmts=None, pdxs=[0,1,2], nPmt=10, nObs=10, n_box=0.5):
-        if pmts is None: pmts = self.get_random_pmt(nPmt)
+        if pmts is None: pmts = self.get_random_pmts(nPmt)
         fns = []
         for pmt in tqdm(pmts):
             preds_pmt = self.eval_LLH_at_pmt(pmt, pdxs, noise_level=noise_level, nObs=nObs, plot=0)
@@ -355,36 +346,70 @@ class BoxWR(BaseBox):
 
 
 #DNN-----------------------------------------------------------------------------------------------------------------------
-    def prepare_trainset(self, N, pmts=None, noise_level=1, add_noise=False, topk=None):
+    
+
+    def prepare_pmts(self, N, pmts=None, odx=None):
         if pmts is None: 
-            pmts = self.get_random_pmt(N, method="random")
+            rands, pmts = self.get_random_pmts(N, method="random", out_rand=True)
         else:
             pmts = pmts[:N]
+            rands = self.minmax_scaler(pmts)        
+        if odx is not None: rands = rands[:,odx]
+        return rands, pmts
+    
+    def prepare_trainset(self, N, pmts=None, noise_level=1, add_noise=False, odx=None, topk=None):
+        rands, pmts = self.prepare_pmts(N, pmts=pmts, odx=odx)
+        if self.onPCA:
+            out = self.prepare_trainset_onPCA_from_pmts(pmts,topk, noise_level=noise_level, add_noise=add_noise, seed=None)
+        else:
+            out = self.prepare_trainset_onFlux_from_pmts(pmts, noise_level=noise_level, add_noise=add_noise, seed=None)
+        return out, rands, pmts
+
+    def prepare_trainset_onPCA_from_pmts(self, pmts, topk, noise_level=1, add_noise=False, seed=None):
         if noise_level <1:
             aks = self.rbf_ak(pmts, topk=topk)
             out = aks if add_noise else [aks, np.zeros_like(aks)]
         else:
             if add_noise:
-                out = self.aug_ak_for_pmts(pmts, noise_level, topk=topk)
+                out = self.aug_ak_in_pmts(pmts, noise_level, topk=topk, seed=seed)
             else:
                 out = self.rbf_ak_sigma(pmts, topk=topk)
-        return out, pmts
+        return out
 
+    def prepare_trainset_onFlux_from_pmts(self, pmts, noise_level=1, add_noise=False, seed = None):
+        if noise_level < 1:
+            out = self.rbf_flux(pmts, log=1, dotA=1)
+            out = out if add_noise else [out, np.zeros_like(out)]
+        else:
+            if add_noise:
+                out = self.aug_flux_in_pmts(pmts, noise_level, seed=seed)
+            else:
+                out = self.rbf_flux_sigma(pmts)
+        return out
+
+
+    def aug_flux_in_pmts(self, pmts, noise_level, seed=None):
+        logModel, sigma_log = self.rbf_flux_sigma(pmts)
+        if seed is not None: np.random.seed(seed)
+        sigma = sigma_log * noise_level
+        logNoise = np.random.normal(0, sigma, sigma.shape)
+        logObsfluxs = logModel + logNoise
+        return logObsfluxs
 
     def prepare_testset(self, N, pmts=None, noise_level=1, topk=None, seed=None):
-        pmts = self.get_random_pmt(N, method="random") if pmts is None else pmts[:N]
+        pmts = self.get_random_pmts(N, method="random") if pmts is None else pmts[:N]
         if noise_level <1: 
             out = self.rbf_ak(pmts, topk=topk)
         else:
-            out = self.aug_ak_for_pmts(pmts, noise_level, topk=topk, seed=seed)
+            out = self.aug_ak_in_pmts(pmts, noise_level, topk=topk, seed=seed)
         return out, pmts
 
-    def aug_ak_for_pmts(self, pmts, noise_level, topk=None, seed=None):
+    def aug_ak_in_pmts(self, pmts, noise_level, topk=None, seed=None):
         aks, sigma = self.rbf_ak_sigma(pmts, topk=topk)
         if seed is not None: np.random.seed(seed)
         sigma = sigma * noise_level
         noiseMat = np.random.normal(0, sigma, sigma.shape)
-        eigv = self.eigv[:topk]
+        eigv = self.eigv0[:topk]
         noisePC = noiseMat.dot(eigv.T) # convert noise into topk PC basis
         bks = aks + noisePC
         return bks

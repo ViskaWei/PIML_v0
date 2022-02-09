@@ -19,10 +19,14 @@ import warnings
 warnings.filterwarnings("ignore")
 logging.getLogger('tensorflow').setLevel(logging.FATAL)
 
-os.environ["CUDA_VISIBLE_DEVICES"]="0,1,2,3"
+os.environ["CUDA_VISIBLE_DEVICES"]="2,3"
+devices = tf.config.list_physical_devices('GPU')
+for device in devices:
+    tf.config.experimental.set_memory_growth(device, True)
+logging.info(device)
 
-import tensorflow as tf
-logging.info(tf.config.list_physical_devices('GPU'))
+
+
 
 
 class DNN(object):

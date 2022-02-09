@@ -7,9 +7,9 @@ def main():
     # Rs=["R"]
 
     # Rs=["B"]
-    Rs=["M"]
-    # Rs=["W"]
-    # Rs=["C"]
+    # Rs=["M"]
+    # Rs=["W"] #2020
+    Rs=["C"]
     # Rs=["G"]
 
     Res=5000
@@ -33,7 +33,7 @@ def main():
     name=f"B{batch}_t{topk}"
 
     d.init_train(odx=[0,1,2], mtype=mtype, train_NL=train_NL, nTrain=nTrain, save=1, name=name)
-    d.run(lr=0.03, dp=0.01, batch=batch, nEpoch=nEpoch, verbose=1)
+    d.run(lr=0.03, dp=0.02, batch=batch, nEpoch=nEpoch, verbose=1)
 
 if __name__ == "__main__":
     main()

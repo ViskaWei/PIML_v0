@@ -75,7 +75,7 @@ class BoxW(BaseBox):
             self.store_scaler(R)
             self.Rs.append(R)
             self.RRs.append(BaseBox.DRR[R])
-        flux, pdx0, para = self.prepare_data_R(self.Res, R, self.step)
+        flux, pdx0, para = self.prepare_data_WR(self.W,R,self.Res,self.step,store=False)
         self.DPara[R] = para
 
         if self.onPCA:
@@ -100,10 +100,6 @@ class BoxW(BaseBox):
             self.DRbf_flux[R] = rbf_flux
 
 
-    def get_random_pmt_R(self, R, nPmt, nPara=5, method="halton"):
-        rands = Util.get_random_uniform(nPmt, nPara, method=method, scaler=None)
-        pmts = self.minmax_rescaler[R](rands)
-        return rands, pmts
 
 #For TrainBoxW ----------------------------------------------------------------------------   
     def prepare_pmts(self, R0, N, pmts=None, odx=None):
@@ -127,7 +123,7 @@ class BoxW(BaseBox):
 
     def prepare_trainset_R0(self, R0, N, pmts=None, noise_level=1, add_noise=False, onPCA=1, odx=None):
         rands, pmts = self.prepare_pmts(R0, N, pmts=pmts, odx=odx)
-
+        #TODO: fix this
         if noise_level <1:
             logfluxs = self.DRbf_flux[R0](pmts, log=1, dotA=0, outA=0) #dotA=0 or 1 is the same as its orthogonal to all box PCs.
             if onPCA:
@@ -139,7 +135,7 @@ class BoxW(BaseBox):
                 out = logfluxs if add_noise else [logfluxs, np.zeros_like(logfluxs)]
         else:
             if add_noise:
-                out = self.aug_flux_for_pmts_R(R0, pmts, noise_level)
+                out = self.aug_flux_in_pmts_R(R0, pmts, noise_level)
             else:
                 logModel, sigma_log  = self.DRbf_flux_sigma[R0](pmts)
                 if self.onPCA: logModel = logModel.dot(self.eigv.T) 
@@ -151,7 +147,7 @@ class BoxW(BaseBox):
         pmts = self.get_random_pmt_R(R1, N, method="random")[1] if pmts is None else pmts[:N]
 
         if noise_level > 1:      
-            logfluxs = self.aug_flux_for_pmts_R(R1, pmts, noise_level, seed=seed)
+            logfluxs = self.aug_flux_in_pmts_R(R1, pmts, noise_level, seed=seed)
         else:
             logfluxs = self.DRbf_flux[R1](pmts, log=1, dotA=0, outA=0) #dotA=0 or 1 is the same as its orthogonal to all box PCs.
             if self.onPCA: logfluxs = logfluxs.dot(self.eigv.T)
@@ -166,7 +162,7 @@ class BoxW(BaseBox):
             x_test[R1], p_test[R1] = self.prepare_testset_R1(R1, N, pmts=pmts_R1, noise_level=noise_level, seed=seed, odx=odx)
         return x_test, p_test
 
-    def aug_flux_for_pmts_R(self, R, pmts, noise_level, seed=None):
+    def aug_flux_in_pmts_R(self, R, pmts, noise_level, seed=None):
         logModel, sigma_log = self.DRbf_flux_sigma[R](pmts)
         if seed is not None: np.random.seed(seed)
         sigma = sigma_log * noise_level

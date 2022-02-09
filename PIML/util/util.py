@@ -96,13 +96,10 @@ class Util(Constants):
         sn = s1 / n1
         return sn
 
-    # def get_random_pmt(self, N_pmt):
-    #     pmt0 = np.random.uniform(0,1,(N_pmt,5))
-    #     pmts = pmt0 * self.bnds[:,0] + self.bnds[:,2]   # [0,1] -> [0,1]                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                734QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ
-    #     return pmts
 
     @staticmethod
     def safe_log(x):
+        if np.min(x) < 1: logging.info("Warning: log(x) is negative")
         return np.log(np.where(x <= 1, 1, x))
 
     @staticmethod

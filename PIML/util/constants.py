@@ -3,10 +3,14 @@ class Constants():
         """
         All Constants for project. Constants are Capitalized.
         """
-        DWs =  {"Blue": [3800, 6500, 2300, "Blue"], "RedL": [6300, 9700, 3000, "RedL"], 
-                "RedM": [7100, 8850, 5000, "Red"], "NIR": [9400, 12600, 4300, "NIR"],
-                "BL": [3800, 6500, 1000, "BL"], "RML": [7100, 8850, 1000, "RML"],
-                "NL": [9400, 12600, 1000,"NL"]}
+        DWs =  {"Blue": [3800, 6500, 2300, 100/23, "Blue"], "RedL": [6300, 9700, 3000, 100/30, "RedL"], 
+                "RedM": [7100, 8850, 5000, 10, "Red"], "NIR": [9400, 12600, 4300, 100/43, "NIR"],
+                "BL": [3800, 6500, 1000, 10, "BL"], "RML": [7100, 8850, 1000, 10, "RML"],
+                "NL": [9400, 12600, 1000, 10, "NL"]}
+
+
+        DWstep = {"Blue": 10, "RedL": 10, "RedM": 10, "NIR": 10, "BL": 10, "RML": 10, "NL": 10}
+        DWires = {"Blue": 2300, "RedL": 3000, "RedM": 5000, "NIR": 4300, "B": 2300, "R": 5000, "N": 4300}
 
         DWw = {"RedM": ["mr", "RML", "RedM"], "Blue": ["b", "BL","Blue"], "NIR": ["n", "NL", "NIR"]}
         DwW = {"RML": ["mr", "RedM", "RML"], "BL": ["b", "Blue","BL"], "NL": ["n", "NIR", "NL"]}

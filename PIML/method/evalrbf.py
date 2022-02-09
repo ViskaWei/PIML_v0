@@ -42,10 +42,10 @@ class EvalRBF(BaseSpec):
         self.pdx0 = self.pdx - self.pdx[0]
         if step is not None:
             self.step = step
-            self.wave_H, flux_H = self.get_flux_in_Wrange(wave_H, flux_H)
+            self.wave_H, flux_H = self.get_flux_in_Wrng(wave_H, flux_H)
             self.wave, self.flux = self.downsample(flux_H)
         else:
-            self.wave, self.flux = self.get_flux_in_Wrange(wave_H, flux_H)
+            self.wave, self.flux = self.get_flux_in_Wrng(wave_H, flux_H)
 
         self.Npix = len(self.wave)
         self.flux0 = self.get_model(self.PhyMid, onGrid=1, plot=1)
@@ -58,8 +58,8 @@ class EvalRBF(BaseSpec):
         self.minmax_scaler, self.minmax_rescaler = BaseBox.get_minmax_scaler_fns(self.PhyMin, self.PhyRng)
         self.pmt2pdx_scaler, _ = BaseBox.get_pdx_scaler_fns(self.PhyMin)
 
-    def get_flux_in_Wrange(self, wave, flux):
-        return BaseSpec._get_flux_in_Wrange(wave, flux, self.Ws)    
+    def get_flux_in_Wrng(self, wave, flux):
+        return BaseSpec._get_flux_in_Wrng(wave, flux, self.Ws)    
 
     def downsample(self, flux_H):
         wave, flux = BaseSpec.resample(self.wave_H, flux_H, self.step)

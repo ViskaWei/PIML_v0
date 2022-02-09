@@ -24,7 +24,7 @@ class TrainBoxW(BoxW):
         
 
 # DNN model ---------------------------------------------------------------------------------
-    def prepare_model_R0(self, R0, lr=0.01, dp=0.0, batch=16, nEpoch=None):
+    def prepare_model_R0(self, R0, lr=0.01, dp=0.0, nEpoch=None):
         NN = BaseNN()
         NN.set_model(self.mtype, noise_level=self.train_NL, eigv=self.eigv)
         NN.set_model_shape(self.nFtr, self.nOdx)
@@ -44,7 +44,7 @@ class TrainBoxW(BoxW):
             self.train_R0(R0, model=model_R0, lr=lr, dp=dp, batch=batch, nEpoch=nEpoch, verbose=verbose)
             
     def train_R0(self, R0, model=None, lr=0.01, dp=0.0, batch=16, nEpoch=100, verbose=1):
-        if model is None: model = self.prepare_model_R0(R0, lr=lr, dp=dp, batch=batch, nEpoch=nEpoch)
+        if model is None: model = self.prepare_model_R0(R0, lr=lr, dp=dp, nEpoch=nEpoch)
         logging.info(model.name)
         model.R0 = R0
         add_noise = False if self.mtype[:2] == "Nz" else True
