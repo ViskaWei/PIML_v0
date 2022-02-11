@@ -36,6 +36,8 @@ class EvalBoxW(TrainBoxW):
         self.model_names = model_names
         self.topk = topk
         self.odx  = odx
+        self.setup_scalers(odx)
+
         self.nOdx = len(odx)
         self.load_eigv(self.topk, stack=1)
         if isinstance(model_names, str): model_names = [model_names]
@@ -53,29 +55,25 @@ class EvalBoxW(TrainBoxW):
         self.nn[R0].nn_rescaler = lambda x: self.rescale(x, R0)
 
     def test(self, test_NL=None, nTest=100, pmts=None, new=True, seed=922):
+        self.setup_scalers(self.odx)        
         self.nTest = nTest
-        self.test_NL = test_NL
+        self.test_NL = test_NL or self.train_NL
         self.nnRs = list(self.nn.keys())
 
         if self.model_names is None:
             [self.set_scale_predict_R0(R0) for R0 in self.nnRs]
 
         if self.x_test is None or new:
-            self.x_test, self.p_test = self.prepare_testset(self.nTest, pmts=pmts, noise_level=test_NL, seed=seed, odx=self.odx)
+            self.x_test, self.p_test = self.prepare_testset(self.nTest, pmts=pmts, noise_level=self.test_NL, seed=seed, odx=self.odx)
         
         for R0 in self.nnRs:
             self.p_pred[R0] = self.test_R0(R0, self.x_test) 
         vertical = 1 if self.nR > 2 else 0
+        self.init_eval()
         self.eval(self.p_pred, self.p_test, vertical=vertical)
 
     def init_test(self, model_names=None, topk=10, odx=[0,1,2], mtype="DNN", save=1, train_NL=None, nTrain=1000, name=""):
-        self.setup_scalers(odx)
-        if model_names is None:
-            self.model_names = None
-            self.init_train(odx=odx, mtype=mtype, save=save, train_NL=train_NL, nTrain=nTrain, name=name)
-        else:
-            self.load_train(model_names, odx=odx, topk=topk)
-        self.init_eval()
+        self.load_train(model_names, odx=odx, topk=topk)
 
         
 

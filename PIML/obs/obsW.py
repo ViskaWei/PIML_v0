@@ -25,8 +25,8 @@ class ObsW(BaseObs):
         self.noise_level_grid = [30,40,50,100,200, 300, 400, 500]
         self.snrList = [10, 20, 30]
 
-        snr2nl = self.get_snr2nl_fn(flux_in_res)
-        self.nlList = snr2nl(self.snrList)
+        self.snr2nl = self.get_snr2nl_fn(flux_in_res)
+        self.nlList = self.snr2nl(self.snrList)
         logging.info(f"nlList: {self.nlList}")  
         
     def get_snr2nl_fn(self, flux_in_res):
@@ -62,7 +62,7 @@ class ObsW(BaseObs):
     def make_obsflux_N(self, N, flux_in_res, noise_level):
         return BaseObs._make_obsflux_N(N, flux_in_res, self.sky_in_res, self.step, noise_level)
 
-    def get_sigma_in_res(self, flux_in_res, noise_level=1):
+    def get_sigma_from_flux(self, flux_in_res, noise_level=1):
         var_in_res = BaseObs.get_var(flux_in_res, self.sky_in_res, step=self.step)
         sigma_in_res = np.sqrt(var_in_res)
         sigma = noise_level * sigma_in_res

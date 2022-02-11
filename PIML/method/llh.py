@@ -102,7 +102,7 @@ class LLH(Util):
         X = LLH.estimate(fn, x0=self.x0[pdx], bnds=None)
         print("estimate", X)
         if plot: 
-            SN = Util.get_snr(obsflux)
+            SN = Util.get_snr(obsflux, obsvar**0.5)
             sigz2 = 0
             self.plot_pmt_on_axis(fn, x, X, SN, sigz2, pdx)
         return X

@@ -1,7 +1,9 @@
+import logging
 from ast import Constant
 from .dnn import DNN
 import numpy as np
 import tensorflow as tf
+
 from tensorflow import keras
 from tensorflow.keras.callbacks import Callback
 from tensorflow.keras import backend as K
@@ -17,18 +19,19 @@ class NzDNN(DNN):
         self.nn_rescaler = None
 
 
-    def build_DataGenerator(self, x_train, x_std, y_train, noise_level, batch_size=32, shuffle=True, validation_split=0.2):
+    def build_DataGenerator(self, x_train, x_std, y_train, batch_size=32, shuffle=True, validation_split=0.2):
         cut = int(x_train.shape[0] * (1 - validation_split))
         # print(f"cut: {cut}")
-        training_generator = DataGenerator(x_train[:cut], x_std[:cut], y_train[:cut], eigv=self.eigv, noise_level=noise_level, batch_size=batch_size, shuffle=shuffle)
-        validation_generator = DataGenerator(x_train[cut:], x_std[cut:], y_train[cut:], eigv=self.eigv, noise_level=noise_level,batch_size=batch_size, shuffle=shuffle)
+        training_generator = DataGenerator(x_train[:cut], x_std[:cut], y_train[:cut], eigv=self.eigv, batch_size=batch_size, shuffle=shuffle)
+        validation_generator = DataGenerator(x_train[cut:], x_std[cut:], y_train[cut:], eigv=self.eigv, batch_size=batch_size, shuffle=shuffle)
         return training_generator, validation_generator
 
     def fit(self,x_train, y_train, nEpoch=1, batch=512, verbose=2, shuffle=True):
         x_data, x_std = x_train
-        # print(x_data.shape, x_std.shape)
-        training_generator, validation_generator = self.build_DataGenerator(x_data, x_std, y_train, 
-                            noise_level=self.noise_level, batch_size=batch, shuffle=shuffle, validation_split=0.2)        
+        assert (x_std.any() >= 0)
+        x_std_nz = self.noise_level * x_std
+        training_generator, validation_generator = self.build_DataGenerator(x_data, x_std_nz, y_train, 
+                            batch_size=batch, shuffle=shuffle, validation_split=0.2)        
         self.model.fit(training_generator, 
                         validation_data=validation_generator, 
                         callbacks=self.callbacks,
@@ -40,33 +43,23 @@ class NzDNN(DNN):
             prints=f"| EP {nEpoch} |"
             for key, value in self.model.history.history.items():
                 prints = prints +  f"{key[:5]}: {value[-1]:.4f} | "
-            print(prints)
+            logging.info(prints)
         tf.keras.backend.clear_session()
             # print(self.model.summary())
 
 
 
 class DataGenerator(tf.keras.utils.Sequence):
-    def __init__(self, data, data_std, labels, eigv=None, noise_level=1, batch_size=32, shuffle=True):
-        self.batch_size = batch_size
+    def __init__(self, data, data_std, labels, eigv=None, batch_size=256, shuffle=True):
         self.data = data
-        self.data_std = self.load_data_std(data_std)
+        self.data_std = data_std
         self.nData, self.nDim = data.shape
         self.nStd = data_std.shape[1]
         self.indices = np.arange(self.nData)
-        self.shuffle = shuffle
         self.labels = labels
-        self.nLabels = labels.shape[1]
-        self.noise_level = noise_level
         self.eigv = eigv
-        
-        self.on_epoch_end()
-
-    def load_data_std(self, data_std):
-        if data_std.any() < 0:
-            raise ValueError("data_std must be positive")
-        else:
-            return data_std
+        self.batch_size = batch_size
+        self.on_epoch_end(shuffle)
 
     def __len__(self):
         return self.nData // self.batch_size
@@ -74,27 +67,22 @@ class DataGenerator(tf.keras.utils.Sequence):
     def __getitem__(self, index):
         index = self.index[index * self.batch_size:(index + 1) * self.batch_size]
         batch = [self.indices[k] for k in index]
-        
         X, y = self.__get_data(batch)
         return X, y
 
-    def on_epoch_end(self):
+    def on_epoch_end(self, shuffle=True):
         self.index = np.arange(self.nData)
-        if self.shuffle == True:
+        if shuffle == True:
             np.random.shuffle(self.index)
 
     def __get_data(self, batch):
-        # X = np.empty((self.batch_size, self.nDim))
-        # y = np.empty((self.batch_size, self.nLabels))
-        
         X = self.data[batch]
         y = self.labels[batch]
-        if self.noise_level >= 1:
-            std = self.data_std[batch]
-            noise = np.random.normal(0, std, size=((self.batch_size, self.nStd)))
-            if self.eigv is not None:
-                noise = noise.dot(self.eigv.T)
-            X = X + noise
+        std = self.data_std[batch]
+        noise = np.random.normal(0, std, size=(self.batch_size, self.nStd))
+        if self.eigv is not None:
+            noise = noise.dot(self.eigv.T)
+        X = X + noise
         return X, y
 
 

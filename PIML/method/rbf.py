@@ -39,18 +39,15 @@ class RBF(object):
     def build_logflux_rbf_interp(self, logflux):
         rbf_interp = self.train_rbf(self.coord, logflux)
         rbf = self.build_rbf(rbf_interp)
-        def interp_flux_fn(x, log=0, dotA=0):
+        def interp_flux_fn(x, log=0):
             logflux = rbf(x)
-            if log:
-                return logflux
-            else:
-                return np.exp(logflux)
+            return logflux if log else np.exp(logflux)
         return interp_flux_fn
 
-    def build_PC_rbf_interp(self, logA, pcflux, eigv):
+    def build_PC_rbf_interp(self, logA, aks, eigv):
         rbf_interp_logA = self.train_rbf(self.coord, logA)
         rbf_logA = self.build_rbf(rbf_interp_logA)
-        rbf_interp_ak = self.train_rbf(self.coord, pcflux)
+        rbf_interp_ak = self.train_rbf(self.coord, aks)
         rbf_ak = self.build_rbf(rbf_interp_ak)
         
         def interp_logA(pmt, log=1):
@@ -59,16 +56,13 @@ class RBF(object):
                 logA = logA[:, np.newaxis]
             return logA if log else np.exp(logA)
 
-        def interp_model_fn(pmt, log=0, dotA=0, outA=0):
+        def interp_model_fn(pmt, log=0, dotA=1, outA=0):
             ak = rbf_ak(pmt)
             logModel = ak.dot(eigv)
             if dotA:
                 logModel = logModel + interp_logA(pmt, log=1)
             flux = logModel if log else np.exp(logModel)
-            if outA:
-                return ak, flux
-            else:
-                return flux
+            return [ak, flux] if outA else flux
 
         def interp_ak(pmt, topk=None):
             ak = rbf_ak(pmt)

@@ -24,6 +24,7 @@ class BaseNN(Constants):
 
         self.cls.noise_level = noise_level
         if eigv is not None:
+
             self.cls.eigv = eigv
 
     def set_model_shape(self, input_dim, output_dim):

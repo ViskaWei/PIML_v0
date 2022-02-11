@@ -19,7 +19,7 @@ import warnings
 warnings.filterwarnings("ignore")
 logging.getLogger('tensorflow').setLevel(logging.FATAL)
 
-os.environ["CUDA_VISIBLE_DEVICES"]="2,3"
+# os.environ["CUDA_VISIBLE_DEVICES"]="0,1,2,3"
 devices = tf.config.list_physical_devices('GPU')
 for device in devices:
     tf.config.experimental.set_memory_growth(device, True)
@@ -92,7 +92,7 @@ class DNN(object):
             raise 'optimizer not working'
 
     def get_model_name(self, name):
-        out_name = f'{self.mtype[:3]}_nl{self.noise_level}_lr{self.lr}_I{self.input_dim}_h{len(self.hidden_dims)}_O{self.output_dim}_'
+        out_name = f'{self.mtype[:3]}_nl{self.noise_level:.0f}_lr{self.lr}_I{self.input_dim}_h{len(self.hidden_dims)}_O{self.output_dim}_'
         if self.dp != 0:
             out_name = out_name + f'dp{self.dp}_'
         t = datetime.datetime.now().strftime("%d_%H%M")
@@ -127,10 +127,10 @@ class DNN(object):
     def get_units(self):
         if self.hidden_dims.size == 0:
             if self.input_dim <= 1000:
-                # hidden_dims = np.array([128, 64, 32, 16])
+                hidden_dims = np.array([128, 64, 32, 16])
                 # hidden_dims = np.array([512, 256, 128, 64, 32, 16])
                 # hidden_dims = np.array([1024, 512, 256, 128, 64, 32, 16])
-                hidden_dims = np.array([2048, 1024, 512, 256, 128, 64, 32, 16])
+                # hidden_dims = np.array([2048, 1024, 512, 256, 128, 64, 32, 16])
 
                 
                 
@@ -184,31 +184,10 @@ class DNN(object):
         print("saving model to: ", path)
         self.model.save(path)
     
-    # def eval(self, x_test, y_test, WR, Prng):
-    #     if self.top is not None:
-    #         if self.mtype == "PCA":
-    #             y_pred = self.model.predict(x_test[:,:self.top])
-    #         elif self.mtype == "PCP":
-    #             x_test = self.pcpflux_top(x_test, top=(self.top // 4))
-    #             y_pred = self.model.predict(x_test)
-    #     self.MSE = np.mean(np.square(y_test - y_pred), axis=0)
-    #     self.MAE = np.mean(np.abs(y_test - y_pred), axis=0)
-    #     self.RMS = np.sqrt(self.MSE)
-    #     self.MAEP = np.multiply(self.MAE, Prng)[0]
-    #     self.plot_pred(y_test, y_pred, WR=WR)
-    #     return y_pred
-
-# class MyCallback(Callback):
-#     def on_epoch_end(self, epoch, logs=None):
-#         if epoch % 10 == 1:
-#             print(epoch, self.model.losses)
-    # def plot_pred(self, y_test, y_pred, WR=""):
-    #     f, axs = plt.subplots(1,self.output_dim, figsize=(5*self.output_dim,4), sharex="row", sharey="row", facecolor="w")
-    #     for pdx in range(self.output_dim):
-    #         ax = axs[pdx]
-    #         ax.scatter(y_test[:,pdx], y_pred[:,pdx], s=1, c=y_test[:,pdx])
-    #         ax.plot([[0,0], [1,1]], "r")
-    #         ax.annotate(f"\n{WR}\nMSE={self.MSE[pdx]:.4f}\n$\Delta$ {self.pname[pdx]}={self.MAEP[pdx]:.2f}\nRMS={self.RMS[pdx]:.2f}", 
-    #                         (0.15, 0.75), xycoords="axes fraction")
-    #         ax.set_xlabel(f"Norm {self.pname[pdx]}")
-    #     axs[0].set_ylabel(f"Top {self.top} {self.mtype} Pred")    
+class TimingCallback(keras.callbacks.Callback):
+    def __init__(self, logs={}):
+        self.logs=[]
+    def on_epoch_begin(self, epoch, logs={}):
+        self.starttime = timer()
+    def on_epoch_end(self, epoch, logs={}):
+        self.logs.append(timer()-self.starttime)

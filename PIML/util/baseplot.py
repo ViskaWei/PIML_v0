@@ -185,28 +185,29 @@ class BasePlot(object):
 
 
 
-    def plot_box(self, pdxs, data=None, fns=[], n_box=0.1, ylbl=1, axs=None):
-        npdx = len(pdxs)
+    def plot_box(self, odxs=None, data=None, fns=[], n_box=0.1, ylbl=1, axs=None):
+        if odxs is None: odxs = self.odx
+        nOdx = len(odxs)
         if axs is None: 
-            nPlot = npdx if npdx != 2 else 1
+            nPlot = nOdx if nOdx != 2 else 1
             f, axs = plt.subplots(1, nPlot, figsize=(5*nPlot, 4), facecolor="w")
-            if npdx == 2: axs = [axs]
+            if nOdx == 2: axs = [axs]
         fns = fns + [self.make_box_fn(n_box)]
         if data is not None:
             fns = fns +  [BasePlot.scatter_fn(data, c="b")]
         for i, ax in enumerate(axs):
-            j = 0 if i == npdx-1 else i + 1
+            j = 0 if i == nOdx-1 else i + 1
             handles, labels = ax.get_legend_handles_labels()
             handles = []
             for fn in fns:
                 handles = fn(i, j, ax, handles)
     
             ax.legend(handles = handles)
-            ax.set_xlabel(Util.PhyLong[pdxs[i]])            
+            ax.set_xlabel(Util.PhyLong[odxs[i]])            
             # ax.annotate(f"{self.dR[R0]}-NN", xy=(0.5,0.8), xycoords="axes fraction",fontsize=15, c=self.dRC[R0])           
             # if Ps is not None: ax.set_title(f"[M/H] = {Ps[0]:.2f}, Teff={int(Ps[1])}K, logg={Ps[2]:.2f}")
-            if ylbl: ax.set_ylabel(Util.PhyLong[pdxs[j]])
-            if npdx == 2: return f
+            if ylbl: ax.set_ylabel(Util.PhyLong[odxs[j]])
+            if nOdx == 2: return f
         return f
 
 

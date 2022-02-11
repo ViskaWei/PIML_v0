@@ -43,27 +43,23 @@ class BaseObs(BaseSpec):
         SN = []
         for noise_level in noise_level_grid:
             obsfluxs = flux_in_res + noise_level * noise
-            sn = BaseObs.get_snr(obsfluxs, sigma_in_res, noise_level)
+            sn = Util.get_snr(obsfluxs, sigma_in_res, noise_level)
             sn = sn * np.sqrt(factor)
             SN.append(sn)
         logging.info(f"snr2nl-SN: {SN}")
         f = sp.interpolate.interp1d(SN, noise_level_grid, fill_value=0)
         return f
 
-    @staticmethod
-    def get_snr(obsfluxs, sigma, noise_level=1):
-        return np.mean(np.divide(obsfluxs, noise_level*sigma))
-
 
     @staticmethod
-    def get_avg_snr(fluxs, top=10):
+    def get_avg_snr(fluxs, sigma, top=10):
         if isinstance(fluxs, list) or (len(fluxs.shape)>1):
             SNs = []
             for nsflux in fluxs[:top]:
-                SNs.append(Util.get_snr(nsflux))
+                SNs.append(Util.get_snr(nsflux, sigma))
             return np.mean(SNs)
         else:
-            return Util.get_snr(fluxs)
+            return Util.get_snr(fluxs, sigma)
     
     @staticmethod
     def _make_obsflux(flux_in_res, sky_in_res, step, noise_level):
@@ -77,9 +73,9 @@ class BaseObs(BaseSpec):
     def _make_obsflux_sigma(flux_in_res, sky_in_res, step, noise_level):
         var_in_res = BaseObs.get_var(flux_in_res, sky_in_res, step=step)
         sigma_in_res = np.sqrt(var_in_res)
-        noise      = BaseObs.get_sigma_noise(sigma_in_res)
-        obsflux_in_res = flux_in_res + noise_level * noise
         obssigma_in_res = sigma_in_res * noise_level
+        noise      = BaseObs.get_sigma_noise(obssigma_in_res)
+        obsflux_in_res = flux_in_res + noise
         return obsflux_in_res, obssigma_in_res
 
 
@@ -124,14 +120,16 @@ class BaseObs(BaseSpec):
         noise = np.random.normal(0, np.sqrt(varm), np.shape(varm))
         return noise
 
+    @staticmethod
     def get_sigma_noise(sigma):
         return np.random.normal(0, sigma, np.shape(sigma))
 
 #plot ---------------------------------------------------------------------------------
     @staticmethod
-    def plot_noisy_spec(wave, flux_in_res, obsflux_in_res, pmt0):
+    def plot_noisy_spec(wave, flux_in_res, obsflux_in_res, sigma, pmt0):
         plt.figure(figsize=(9,3), facecolor='w')
-        SN = Util.get_snr(obsflux_in_res)
+        if sigma is not None:
+            SN = Util.get_snr(obsflux_in_res)
         plt.plot(wave, obsflux_in_res, lw=1, label=f"SNR={SN:.1f}", color="gray")
         plt.plot(wave, flux_in_res, color="r")
         name = Util.get_pmt_name(*pmt0)

@@ -143,64 +143,75 @@ class BaseBox(Util):
         return flux, pdx0, para, Obs
         
 #rbf ---------------------------------------------------------------------------
-    def prepare_rbf(self, coord, coord_scaler, flux, onPCA=1, Obs=None, topk=None, fast=False):
+    def prepare_logflux_rbf(self, coord, coord_scaler, flux, Obs=None):
         logflux = Util.safe_log(flux)
         rbf = RBF(coord=coord, coord_scaler=coord_scaler)
-        if onPCA:
-            top = topk if fast else None
-            logA, pcflux, eigv = self.prepare_pca(logflux, top=top)
-            rbf_flux, rbf_logA, rbf_ak = rbf.build_PC_rbf_interp(logA, pcflux, eigv)
-            if Obs is None: return eigv, pcflux, [rbf_flux, rbf_ak, None, None] 
+        rbf_flux = rbf.build_logflux_rbf_interp(logflux)
+        if Obs is None:
+            return rbf_flux, None
         else:
-            rbf_flux = rbf.build_logflux_rbf_interp(logflux)
-            if Obs is None: return rbf_flux, None, None
+            def rbf_flux_sigma(pmt):
+                Model = rbf_flux(pmt, log=0)
+                sigma = Obs.get_sigma_from_flux(flux, noise_level=1)
+                return Model, sigma
+            return rbf_flux, rbf_flux_sigma
 
-        def rbf_sigma(pmt, noise_level, divide=0):
+    def prepare_PC_rbf(self, coord, coord_scaler, flux, Obs=None, topk=None, fast=False):
+        logflux = Util.safe_log(flux)
+        rbf = RBF(coord=coord, coord_scaler=coord_scaler)
+        top = topk if fast else None
+        logA, aks, eigv = self.prepare_pca(logflux, top=top)
+        rbf_flux, rbf_logA, rbf_ak = rbf.build_PC_rbf_interp(logA, aks, eigv)
+        if Obs is None: return eigv, aks, [rbf_flux, rbf_ak, None, None] 
+
+        def rbf_flux_sigma(pmt):
             AModel = rbf_flux(pmt, log=0, dotA=1, outA=0)
-            sigma = Obs.get_sigma_in_res(AModel, noise_level)
-            if divide:
-                # divide for bias in ak
-                return np.divide(sigma, AModel)
-            else:
-                return sigma
+            sigma = Obs.get_sigma_from_flux(AModel, 1) # noise level = 1
+            return [AModel, sigma]
 
         def rbf_ak_sigma(pmt, topk=None):
             ak, AModel = rbf_flux(pmt, log=0, dotA=1, outA=1)
-            sigma = Obs.get_sigma_in_res(AModel, 1) # noise level = 1
+            sigma = Obs.get_sigma_from_flux(AModel, 1) # noise level = 1
             sigma_log = np.divide(sigma, AModel)
             return [ak[...,:topk], sigma_log]
 
-        if onPCA:
-            def rbf_flux_sigma(pmt):
-                logModel = rbf_flux(pmt, log=1, dotA=0, outA=0)
-                logAModel = rbf_logA(pmt, log=1) + logModel
-                AModel = np.exp(logAModel)
-                sigma = Obs.get_sigma_in_res(AModel, 1) # noise level = 1
-                sigma_log = np.divide(sigma, AModel) # valid for NL <= 100
-                return [logModel, sigma_log]
-        else:
-            def rbf_flux_sigma(pmt):
-                logModel = rbf_flux(pmt, log=1, dotA=1, outA=0)
-                Model = np.exp(logModel)
-                sigma = Obs.get_sigma_in_res(Model, 1) # noise level = 1
-                sigma_log = np.divide(sigma, Model) # valid for NL <= 100
-                return [logModel, sigma_log]
+        def rbf_logflux_sigma(pmt):
+            logAModel = rbf_flux(pmt, log=1, dotA=1, outA=0)
+            AModel = np.exp(logAModel)
+            sigma = Obs.get_sigma_from_flux(AModel, 1) # noise level = 1
+            sigma_log = sigma / AModel
+            return [logAModel, sigma_log]
 
-        def gen_nObs_noise(sigma_ak, nObs=1):
-            if nObs > 1:
-                sigma_ak = np.tile(sigma_ak, (nObs, 1))
-            noise = np.random.normal(0, sigma_ak, sigma_ak.shape)
-            if onPCA: 
-                return eigv.dot(noise)
-            else:
-                return noise
+        def gen_nObs_noise(sigma, nObs=1, topk=None):
+            if nObs > 1: sigma = np.tile(sigma, (nObs, 1))
+            noise = np.random.normal(0, sigma, sigma.shape)
+            return noise.dot(eigv[:topk].T)
         
-        if onPCA:
-            return eigv, pcflux, [rbf_flux, rbf_ak, rbf_sigma, rbf_ak_sigma, rbf_flux_sigma, gen_nObs_noise]
-        else:
-            return rbf_flux, rbf_sigma, rbf_flux_sigma, gen_nObs_noise
+        return eigv, aks, [rbf_flux, rbf_flux_sigma, rbf_ak, rbf_ak_sigma, rbf_logflux_sigma, rbf_logA, gen_nObs_noise]
+
+
+
 
 # PCA --------------------------------------------------------------------------
+    def prepare_pca(self, logfluxs, top=None):
+        logA = np.mean(logfluxs, axis=1)
+        lognormModels = logfluxs - logA[:, None]
+        u,s,v = np.linalg.svd(lognormModels, full_matrices=False)
+        if top is not None: 
+            u = u[:, :top]
+            s = s[:top]
+            v = v[:top]
+            self.pcaDim = len(v)
+        nS = len(s)
+        logging.info(f"Top #{nS} eigs {s[:10].round(2)}")
+        assert np.allclose(v.dot(v.T), np.eye(nS))
+        assert np.allclose(np.sum(v[:-1], axis=1).mean(), 0.0) 
+
+        aks = u * s
+        assert np.allclose(lognormModels.dot(v.T), aks)
+        return logA, aks, v
+    
+    
     def prepare_pca(self, logfluxs, top=None):
         nPix = logfluxs.shape[1]
         logA = np.mean(logfluxs, axis=1)
@@ -234,18 +245,15 @@ class BaseBox(Util):
 
 # rand -------------------------------------------------------------------------
 
-    def get_random_pmts_R(self, R, nPmt, nPara=5, method="halton"):
+    def get_random_pmts_R(self, R, nPmt, nPara=5, method="halton", outRnd=False):
         rands = Util.get_random_uniform(nPmt, nPara, method=method, scaler=None)
         pmts = self.minmax_rescaler[R](rands)
-        return rands, pmts
+        return [rands, pmts] if outRnd else pmts
 
-    def get_random_pmts(self, nPmt, nPara=5, method="halton", out_rand=False):
+    def get_random_pmts(self, nPmt, nPara=5, method="halton", outRnd=False):
         rands = Util.get_random_uniform(nPmt, nPara, method=method)
         pmts = self.minmax_rescaler(rands)
-        if out_rand: 
-            return rands, pmts
-        else:
-            return pmts
+        return [rands, pmts] if outRnd else pmts
 
     @staticmethod
     def _get_random_pmt(PhyRng, PhyMin, N_pmt):

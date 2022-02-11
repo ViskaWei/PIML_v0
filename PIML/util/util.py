@@ -82,7 +82,12 @@ class Util(Constants):
 
 #sampling----------------------------------------------------------------
     @staticmethod
-    def get_snr(flux):
+    def get_snr(obsfluxs, sigma, noise_level=1):
+        return np.mean(np.divide(obsfluxs, noise_level*sigma))
+
+
+    @staticmethod
+    def get_snr_from_shift(flux):
         #--------------------------------------------------
         # estimate the S/N using Stoehr et al ADASS 2008
         #    signal = median(flux(i))

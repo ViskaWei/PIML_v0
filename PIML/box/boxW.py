@@ -27,7 +27,7 @@ class BoxW(BaseBox):
         self.DRbf_noiz = {}
 
 
-    def init_box(self, W, Rs, Res, step, topk=10, onPCA=1, load_eigv=False):
+    def init_box(self, W, Rs, Res, step, topk=10, onPCA=1, load_eigv=False, stack=False):
         self.init_WR(W,Rs)
         self.Res = Res
         self.step = step
@@ -36,36 +36,25 @@ class BoxW(BaseBox):
         for R in self.Rs:
             self.run_step_rbf(R)
         if load_eigv: 
-            self.DV = self.load_eigv(topk=topk)
-        self.set_eigv()
-        # self.init_plot_R()
+            self.DV = self.IO.load_eigv(topk=topk)
+        if stack:
+            self.eigv, self.nFtr = self.stack_eigv()
+        else:
+            self.eigv = self.DV
+            self.nFtr = self.topk
 
     def save_eigv(self):
-        
         self.IO.save_eigv(self.DV)
-
-    def load_eigv(self, topk=None, stack=0):
-        DV = self.IO.load_eigv(topk=topk)
-        if stack:
-            self.DV = DV
-            self.set_eigv()
-        else:
-            return DV
 
     def stack_eigv(self):
         nFtr = 0
         eigvs = []
         for eigv in self.DV.values():
-            eigvs.append(eigv[:self.topk])
-            nFtr += len(eigv)
+            eigv0 = eigv[:self.topk]
+            eigvs.append(eigv0)
+            nFtr += len(eigv0)
         assert nFtr == self.topk*len(self.DV)
         return np.vstack(eigvs), nFtr
-
-    def set_eigv(self):
-        self.eigv, self.nFtr = self.stack_eigv()
-
-        
-        
 
 #rbf -----------------------------------------------------------------------------------------------------------------------
     def run_step_rbf(self, R, fast=False):
@@ -75,28 +64,25 @@ class BoxW(BaseBox):
             self.store_scaler(R)
             self.Rs.append(R)
             self.RRs.append(BaseBox.DRR[R])
-        flux, pdx0, para = self.prepare_data_WR(self.W,R,self.Res,self.step,store=False)
+        flux, pdx0, para, self.Obs = self.prepare_data_WR(self.W,R,self.Res,self.step,store=False)
         self.DPara[R] = para
 
         if self.onPCA:
-            eigv_R, pcflux, fns = self.prepare_rbf(pdx0, self.pmt2pdx_scaler[R], 
-                                                flux, onPCA=self.onPCA, Obs=self.Obs, topk=self.topk, fast=fast)
-            rbf_flux, rbf_ak, _, _, rbf_flux_sigma, gen_nObs_noise = fns
-            error = abs(pcflux - rbf_ak(para)).sum()
-            logging.info(f"error: {error}")
+            eigv_R, aks, fns = self.prepare_PC_rbf(pdx0, self.pmt2pdx_scaler[R], 
+                                                flux, Obs=self.Obs, topk=self.topk, fast=fast)
+            rbf_flux, rbf_flux_sigma, rbf_ak, rbf_ak_sigma, rbf_logflux_sigma, rbf_logA, gen_nObs_noise = fns
+            assert np.allclose(aks, rbf_ak(para))
 
             self.DV[R] = eigv_R
-            # self.DAk[R] = pcflux
             self.DRbf_ak[R] = rbf_ak                                                                
-            self.DRbf_flux_sigma[R] = rbf_flux_sigma
+            self.DRbf_flux_sigma[R] = rbf_logflux_sigma
             self.DRbf_flux[R] = rbf_flux
             # self.DRbf_noiz[R] = gen_nObs_noise
         else:
-            rbf_flux, rbf_sigma, gen_nObs_noise =  self.prepare_rbf(pdx0, self.pmt2pdx_scaler[R], 
-                                                                            flux, onPCA=self.onPCA, Obs=self.Obs)
+            rbf_flux, rbf_flux_sigma = self.prepare_logflux_rbf(pdx0, self.pmt2pdx_scaler[R], flux, Obs=self.Obs)
             error = abs(np.log(flux) - rbf_flux(para, log=1, dotA=1)).sum()
             logging.info(f"error: {error}")
-            self.DRbf_sigma[R] = rbf_sigma
+            self.DRbf_flux_sigma[R] = rbf_flux_sigma
             self.DRbf_flux[R] = rbf_flux
 
 
@@ -104,7 +90,7 @@ class BoxW(BaseBox):
 #For TrainBoxW ----------------------------------------------------------------------------   
     def prepare_pmts(self, R0, N, pmts=None, odx=None):
         if pmts is None: 
-            rands, pmts = self.get_random_pmt_R(R0, N, method="random")
+            rands, pmts = self.get_random_pmts_R(R0, N, method="random", outRnd=True)
         else:
             pmts = pmts[:N]
             rands = self.minmax_scaler[R0](pmts)        
@@ -115,57 +101,51 @@ class BoxW(BaseBox):
         x_train, y_train, p_train = {}, {}, {}
         for R in self.Rs:
             pmts_R = None if pmts is None else pmts[R]
-            pcfluxs, rands, pmts_R = self.prepare_trainset_R0(R, N, pmts=pmts_R, add_noise=add_noise, noise_level=noise_level, onPCA=self.onPCA, odx=None)
-            x_train[R] = pcfluxs
+            aks, rands, pmts_R = self.prepare_trainset_R0(R, N, pmts=pmts_R, add_noise=add_noise, noise_level=noise_level, odx=None)
+            x_train[R] = aks
             y_train[R] = rands
             p_train[R] = pmts_R
         return x_train, y_train, p_train
 
-    def prepare_trainset_R0(self, R0, N, pmts=None, noise_level=1, add_noise=False, onPCA=1, odx=None):
+    def prepare_trainset_R0(self, R0, N, pmts=None, noise_level=1, add_noise=False, topk=None, eigv=None,  odx=None):
         rands, pmts = self.prepare_pmts(R0, N, pmts=pmts, odx=odx)
-        #TODO: fix this
-        if noise_level <1:
-            logfluxs = self.DRbf_flux[R0](pmts, log=1, dotA=0, outA=0) #dotA=0 or 1 is the same as its orthogonal to all box PCs.
-            if onPCA:
-                pcfluxs = logfluxs.dot(self.eigv.T)
-                assert pcfluxs.shape == (N, self.nFtr)
-                logging.info(f"generating {pcfluxs.shape} training data for {BaseBox.DRR[R0]}")
-                out = pcfluxs if add_noise else [pcfluxs, np.zeros_like(pcfluxs)]
-            else:
-                out = logfluxs if add_noise else [logfluxs, np.zeros_like(logfluxs)]
+        if self.onPCA:
+            out = self.prepare_ak_onPCA_R0(R0, pmts, eigv, topk=topk, noise_level=noise_level, add_noise=add_noise)
         else:
-            if add_noise:
-                out = self.aug_flux_in_pmts_R(R0, pmts, noise_level)
-            else:
-                logModel, sigma_log  = self.DRbf_flux_sigma[R0](pmts)
-                if self.onPCA: logModel = logModel.dot(self.eigv.T) 
-                out = [logModel, sigma_log]
-            if odx is not None: pmts = pmts[:, odx]
-        return out, rands, pmts
-            
-    def prepare_testset_R1(self, R1, N, pmts=None, noise_level=1, seed=None, odx=None):
-        pmts = self.get_random_pmt_R(R1, N, method="random")[1] if pmts is None else pmts[:N]
-
-        if noise_level > 1:      
-            logfluxs = self.aug_flux_in_pmts_R(R1, pmts, noise_level, seed=seed)
-        else:
-            logfluxs = self.DRbf_flux[R1](pmts, log=1, dotA=0, outA=0) #dotA=0 or 1 is the same as its orthogonal to all box PCs.
-            if self.onPCA: logfluxs = logfluxs.dot(self.eigv.T)
-
+            #TODO: fix this
+            pass
         if odx is not None: pmts = pmts[:, odx]
-        return logfluxs, pmts
+        return out, rands, pmts
 
-    def prepare_testset(self, N, pmts=None, noise_level=1, seed=None, odx=None):
+    def prepare_ak_onPCA_R0(self, R0, pmts, eigv, noise_level=1, topk=None, add_noise=False):
+        logfluxs, sigma_log = self.DRbf_flux_sigma[R0](pmts)
+        if add_noise:
+            obssigma = sigma_log * noise_level
+            noise = np.random.normal(0, obssigma, obssigma.shape)
+            logfluxs += noise
+        aks = logfluxs.dot(eigv.T)
+        logging.info(f"generating {aks.shape} training data for {BaseBox.DRR[R0]}")
+        return aks if add_noise else [aks, sigma_log]
+                
+    def prepare_testset_R1(self, R1, N, pmts=None, noise_level=1, eigv=None, odx=None):
+        pmts = self.get_random_pmts_R(R1, N, method="random", outRnd=False) if pmts is None else pmts[:N]
+        if self.onPCA:
+            out = self.prepare_logflux_on_PCA_R0(R1, pmts, noise_level=noise_level)
+            if eigv is not None: out = out.dot(eigv.T)
+        else:
+            pass
+        if odx is not None: pmts = pmts[:, odx]
+        return out, pmts
+
+    def prepare_testset(self, N, pmts=None, noise_level=1, eigv=None, odx=None):
         x_test, p_test={}, {}
         for R1 in self.Rs:
             pmts_R1 = None if pmts is None else pmts[R1]
-            x_test[R1], p_test[R1] = self.prepare_testset_R1(R1, N, pmts=pmts_R1, noise_level=noise_level, seed=seed, odx=odx)
+            x_test[R1], p_test[R1] = self.prepare_testset_R1(R1, N, pmts=pmts_R1, noise_level=noise_level, eigv=eigv, odx=odx)
         return x_test, p_test
 
-    def aug_flux_in_pmts_R(self, R, pmts, noise_level, seed=None):
-        logModel, sigma_log = self.DRbf_flux_sigma[R](pmts)
-        if seed is not None: np.random.seed(seed)
-        sigma = sigma_log * noise_level
-        logNoise = np.random.normal(0, sigma, sigma.shape)
-        logObsfluxs = logModel + logNoise
-        return logObsfluxs.dot(self.eigv.T) if self.onPCA else logObsfluxs
+    def prepare_logflux_on_PCA_R0(self, R0, pmts, noise_level=1):
+        logfluxs, sigma_log = self.DRbf_flux_sigma[R0](pmts)
+        obssigma = sigma_log * noise_level
+        noise = np.random.normal(0, obssigma, obssigma.shape)
+        return logfluxs + noise

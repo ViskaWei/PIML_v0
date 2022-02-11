@@ -1,4 +1,5 @@
 from PIML.nn.trainboxW import TrainBoxW
+# os.environ["CUDA_VISIBLE_DEVICES"]="0,1,2,3"
 
 def main():
     d = TrainBoxW()

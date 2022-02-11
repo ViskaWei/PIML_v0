@@ -26,7 +26,7 @@ class dnnWR(BaseBox):
     def init(self, W, R, nFtr=10, odx=[0,1,2]):
         self.init_W(W)
         self.init_R(R)
-        self.odx  = odx
+        self.odx = odx
         self.nOdx = len(odx)
         self.nFtr = nFtr
         self.nn_scaler, self.nn_rescaler = self.setup_scaler(self.PhyMin, self.PhyMax, self.PhyRng, odx=self.odx)
@@ -68,7 +68,7 @@ class dnnWR(BaseBox):
         self.eigv = BoxWR.eigv
         self.nn_scaler, self.nn_rescaler = self.setup_scaler(self.PhyMin, self.PhyMax, self.PhyRng, odx=self.odx)
         self.PhyLong =  [dnnWR.PhyLong[odx_i] for odx_i in self.odx]
-        self.estimate_snr = BoxWR.estimate_snr
+        self.snr2nl = BoxWR.Obs.snr2nl
         self.get_random_pmt = lambda x: BoxWR.get_random_pmts(x, nPara=5, method="halton")
         self.nlList = BoxWR.Obs.nlList
         self.snrList = BoxWR.Obs.snrList
@@ -82,7 +82,7 @@ class dnnWR(BaseBox):
             return x, p
         
         def prepare_noiseset(pmt, noise_level=1, nObs=1):
-            x = BoxWR.prepare_noiseset(pmt, noise_level, nObs)
+            x = BoxWR.prepare_noiseset(pmt, noise_level, nObs, topk=self.nFtr)
             return x
 
         return prepare_trainset, prepare_testset, prepare_noiseset
@@ -120,18 +120,17 @@ class dnnWR(BaseBox):
 
 
     def test(self, nTest=100, test_NL=None, pmts=None, seed=None):
-        self.nTest = nTest        
-        self.test_NL=test_NL or self.nlList[0]
-        self.x_test, self.p_test = self.prepare_testset(nTest, pmts=pmts, noise_level=test_NL, seed=seed)
+        self.nTest = nTest       
+        if test_NL is None:
+            self.test_NL=self.nlList[0]
+            self.test_snr = self.snrList[0]
+        else:
+            self.test_NL = test_NL
+            self.test_snr = self.snrList[self.nlList.index(test_NL)]
+
+        self.x_test, self.p_test = self.prepare_testset(nTest, pmts=pmts, noise_level=self.test_NL, seed=seed)
         self.p_pred = self.nn.scale_predict(self.x_test)
 
-    
-    def init_eval(self):
-        self.PhyLong =  [BaseBox.PhyLong[odx_i] for odx_i in self.odx]
-        self.init_plot()
-
-
-            
 
     def setup_scaler(self, PhyMin, PhyMax, PhyRng, odx=None):
         if odx is None: odx = self.odx
@@ -157,44 +156,39 @@ class dnnWR(BaseBox):
     #     return pred_params
 
     def init_eval(self):
+        self.PhyLong =  [BaseBox.PhyLong[odx_i] for odx_i in self.odx]
         self.init_plot()
-        # snr = 
-        self.eval_acc(snr)
+        self.eval_acc()
         pmts = self.get_random_pmt(10)
-        self.eval_pmts_noise(pmts, self.test_NL, nObs=100, n_box=0.2)
+        self.eval_pmts_noise(pmts, self.test_snr, nObs=10, n_box=0.2)
 
     def init_plot(self):
-        self.PLT = PlotDNN()
+        self.PLT = PlotDNN(self.odx)
         self.PLT.make_box_fn = lambda x: self.PLT.box_fn(self.pRng, self.pMin, 
                                                         self.pMax, n_box=x, 
                                                         c=BaseBox.DRC[self.R], RR=self.RR)
 
 
-    def eval_acc(self, snr=None):
-        if snr is None: snr = self.test_snr
-        f, axs = self.PLT.plot_acc(self.y_pred, self.p_test, self.pMin, self.pMax, RR=self.RR, axes_name = self.PhyLong)
-        f.suptitle(f"SNR = {snr:.2f}")
+    def eval_acc(self):
+        f, axs = self.PLT.plot_acc(self.p_pred, self.p_test, self.pMin, self.pMax, RR=self.RR, axes_name = self.PhyLong)
+        if self.test_snr is not None:
+            f.suptitle(f"SNR = {self.test_snr:.2f}")
 
 
-    def eval_pmts_noise(self, pmts, noise_level, nObs=10, n_box=0.5):
+    def eval_pmts_noise(self, pmts, snr, nObs=50, n_box=0.5):
         fns = []
-        snr = self.estimate_snr(noise_level)
+        noise_level = self.snr2nl(snr)
 
         for pmt in tqdm(pmts):
             tests_pmt = self.prepare_noiseset(pmt, noise_level, nObs)
-            preds_pmt = self.predict(tests_pmt)
+            preds_pmt = self.nn.scale_predict(tests_pmt)
             fns_pmt = self.PLT.flow_fn_i(preds_pmt, pmt[self.odx], legend=0)
             fns = fns + fns_pmt
 
         f = self.PLT.plot_box(self.odx, fns = fns, n_box=n_box)
         f.suptitle(f"SNR={snr:.2f}")
+        return tests_pmt, preds_pmt
 
-    def eval_pmt_noise(self, pmt, noise_level, nObs, n_box=0.5):
-        tests_pmt = self.gen_input(pmt, noise_level, nObs=nObs)
-        preds = self.predict(tests_pmt)
-        snr = self.estimate_snr(noise_level)
-        self.PLT.plot_pmt_noise(preds, pmt[self.odx], self.odx, snr, n_box=n_box)
-        return preds
 
 
 

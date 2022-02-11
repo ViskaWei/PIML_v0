@@ -1,7 +1,7 @@
-from curses import nl
 import os
 import h5py
 import numpy as np
+import logging
 from tqdm import tqdm
 
 from PIML.util.basebox import BaseBox
@@ -52,12 +52,11 @@ class BoxWR(BaseBox):
 #RBF------------------------------------------------------------------------
     def run_step_rbf(self, fast=False):
         if self.onPCA:
-            self.eigv0, self.pcflux, fns = self.prepare_rbf(self.pdx0, self.pmt2pdx_scaler, self.flux, onPCA=self.onPCA, Obs=self.Obs, topk=self.topk, fast=fast)
+            self.eigv0, self.pcflux, fns = self.prepare_PC_rbf(self.pdx0, self.pmt2pdx_scaler, self.flux, Obs=self.Obs, topk=self.topk, fast=fast)
             self.eigv = self.eigv0[:self.topk]
-            self.rbf_flux, self.rbf_ak, _, self.rbf_ak_sigma, _, self.interp_bias_fn = fns
+            self.rbf_flux, self.rbf_flux_sigma, self.rbf_ak, self.rbf_ak_sigma, self.rbf_logflux_sigma, self.gen_nObs_noise = fns
         else:
-            self.rbf_flux, self.rbf_sigma, self.rbf_flux_sigma, self.interp_bias_fn = self.prepare_rbf(self.pdx0, self.pmt2pdx_scaler, self.flux, onPCA=self.onPCA, Obs=self.Obs)
-
+            self.rbf_flux, self.rbf_flux_sigma = self.prepare_logflux_rbf(self.pdx0, self.pmt2pdx_scaler, self.flux, Obs=self.Obs)
 
     def test_rbf(self, pmt1, pmt2=None, axis=1, pmt=None):
         if pmt2 is None:
@@ -65,7 +64,7 @@ class BoxWR(BaseBox):
             pmt2[axis] += BaseBox.PhyTick[axis]
         flux1, flux2 = self.get_model(pmt1,onGrid=1),  self.get_model(pmt2,onGrid=1)
         if pmt is None: pmt = 0.5 * (pmt1 + pmt2)
-        interpFlux = self.rbf_flux(pmt, log=0, dotA=1)
+        interpFlux = self.rbf_flux(pmt, log=0)
         plt.plot(self.wave, interpFlux, label= pmt)
         plt.plot(self.wave, flux1, label = pmt1)
         plt.plot(self.wave, flux2, label = pmt2)
@@ -90,6 +89,7 @@ class BoxWR(BaseBox):
         ak = self.rbf_ak(pmt)
         stdmag = self.rbf_sigma(pmt, noise_level)
         def add_bias(X=None):
+            #FIXME 
             bias = self.interp_bias_fn(stdmag, X)
             return ak + bias
         return add_bias
@@ -139,11 +139,6 @@ class BoxWR(BaseBox):
         if N == 1: obsfluxs = obsfluxs[0]
         return obsfluxs, obsvar
 
-    def estimate_snr(self, flux, NL, step):
-        obsfluxH0,  = self.Obs.make_obsflux(flux, NL)
-        bosz_5000_snr_factor = np.sqrt(2) # sqrt(10000 / 5000)
-        snr = Util.get_snr(obsfluxH0) / bosz_5000_snr_factor
-        return snr
 
 #Bias------------------------------------------------------------------------
 
@@ -185,7 +180,8 @@ class BoxWR(BaseBox):
 
 #LLH --------------------------------------------------
 
-    def eval_LLH_at_pmt(self, pmt, odxs=[1], noise_level=100, nObs=10, plot=0):
+    def eval_LLH_at_pmt(self, pmt, odxs=[1], snr=10, nObs=10, plot=0):
+        noise_level = self.Obs.snr2nl(snr)
         obsfluxs , obsvar = self.make_obs_from_pmt(pmt, noise_level=noise_level, N=nObs)
         # if snr !=np.inf: 
         #     snr = self.Obs.get_avg_snr(obsfluxs, top = nObs)
@@ -196,7 +192,6 @@ class BoxWR(BaseBox):
             preds.append(pred_x)
         preds = np.array(preds).T
         if plot:
-            snr = self.estimate_snr(noise_level)
             self.plot_eval_LLH(pmt, preds, odxs, snr)
         return preds
 
@@ -275,8 +270,9 @@ class BoxWR(BaseBox):
         ax.set_ylabel(f"PC - a{cdx2}") 
 
 
-    def eval_LLH_NL(self, noise_level=None, pmts=None, pdxs=[0,1,2], nPmt=10, nObs=10, n_box=0.5):
+    def eval_LLH_NL(self, snr, pmts=None, pdxs=[0,1,2], nPmt=10, nObs=10, n_box=0.5):
         if pmts is None: pmts = self.get_random_pmts(nPmt)
+        noise_level = self.Obs.snr2nl(snr)
         fns = []
         for pmt in tqdm(pmts):
             preds_pmt = self.eval_LLH_at_pmt(pmt, pdxs, noise_level=noise_level, nObs=nObs, plot=0)
@@ -284,7 +280,6 @@ class BoxWR(BaseBox):
             fns = fns + fns_pmt
 
         f = self.PLT.plot_box(pdxs, fns = fns, n_box=n_box)
-        snr = self.estimate_snr(noise_level)
         f.suptitle(f"SNR={snr:.2f}")
 
     def eval_LLH(self, pmts=None, pdxs=[0,1,2], nPmt=10, n_box=0.5, snrList=None):
@@ -358,6 +353,7 @@ class BoxWR(BaseBox):
         return rands, pmts
     
     def prepare_trainset(self, N, pmts=None, noise_level=1, add_noise=False, odx=None, topk=None):
+        logging.info(f"Prepareing #{N} NL={noise_level} trainset")
         rands, pmts = self.prepare_pmts(N, pmts=pmts, odx=odx)
         if self.onPCA:
             out = self.prepare_trainset_onPCA_from_pmts(pmts,topk, noise_level=noise_level, add_noise=add_noise, seed=None)
@@ -414,15 +410,9 @@ class BoxWR(BaseBox):
         bks = aks + noisePC
         return bks
 
-    def prepare_noiseset(self, pmt, noise_level, nObs):
-        ak0 = self.rbf_ak(pmt)
-        ak = np.tile(ak0, (nObs, 1))
-        if noise_level <=1: 
-            return ak
-        else:
-            #FIX ME: use gen_nObs_noise
-            sigma0 = self.rbf_sigma(pmt, noise_level)
-            sigma = np.tile(sigma0, (nObs, 1))
-            noiseMat = np.random.normal(0, sigma, sigma.shape)
-            noisePC = noiseMat.dot(self.eigv.T)
-            return ak + noisePC
+    def prepare_noiseset(self, pmt, noise_level, nObs, topk=None):
+        assert (noise_level > 1)
+        out, sigma_log = self.rbf_ak_sigma(pmt, topk=topk) if self.onPCA else self.rbf_flux_sigma(pmt)
+        obssigma = sigma_log * noise_level
+        noise = self.gen_nObs_noise(obssigma, nObs, topk=topk)
+        return out + noise
