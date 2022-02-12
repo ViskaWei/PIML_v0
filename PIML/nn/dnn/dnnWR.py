@@ -68,10 +68,13 @@ class dnnWR(BaseBox):
         self.eigv = BoxWR.eigv
         self.nn_scaler, self.nn_rescaler = self.setup_scaler(self.PhyMin, self.PhyMax, self.PhyRng, odx=self.odx)
         self.PhyLong =  [dnnWR.PhyLong[odx_i] for odx_i in self.odx]
-        self.snr2nl = BoxWR.Obs.snr2nl
         self.get_random_pmt = lambda x: BoxWR.get_random_pmts(x, nPara=5, method="halton")
+
+        self.snr2nl = BoxWR.Obs.snr2nl
+        self.nl2snr = BoxWR.Obs.nl2snr
         self.nlList = BoxWR.Obs.nlList
         self.snrList = BoxWR.Obs.snrList
+
         def prepare_trainset(nTrain, pmts=None, noise_level=None, add_noise=True):
             x, y, p = BoxWR.prepare_trainset(nTrain, pmts=pmts, noise_level=noise_level, add_noise=add_noise, odx=self.odx, topk=self.nFtr)
             return x, y, p
@@ -90,7 +93,7 @@ class dnnWR(BaseBox):
     # DNN model ---------------------------------------------------------------------------------
     def prepare_model(self, lr=0.01, dp=0.0, nEpoch=None):
         NN = BaseNN()
-        NN.set_model(self.mtype, noise_level=self.train_NL, eigv=self.eigv)
+        NN.set_model(self.mtype, noise_level=self.trainNL, eigv=self.eigv)
         NN.set_model_shape(self.nFtr, self.nOdx)
         NN.set_model_param(lr=lr, dp=dp, loss='mse', opt='adam')
         if self.save: 
@@ -100,11 +103,11 @@ class dnnWR(BaseBox):
         NN.build_model()
         return NN.cls
 
-    def init_train(self, mtype="NzDNN", name="", save=1, train_NL=None, nTrain=1000):
+    def init_train(self, mtype="NzDNN", name="", save=1, trainNL=None, nTrain=1000):
         self.save = save
         self.mtype = mtype
         self.name = name
-        self.train_NL = train_NL or self.nlList[0]
+        self.trainNL = trainNL or self.nlList[0]
         self.nTrain = nTrain
 
 
@@ -112,23 +115,23 @@ class dnnWR(BaseBox):
         if model is None: model = self.prepare_model(lr=lr, dp=dp, nEpoch=nEpoch)
         logging.info(model.name)
         add_noise = False if self.mtype[:2] == "Nz" else True
-        self.x_train, self.y_train, self.p_train = self.prepare_trainset(self.nTrain, noise_level=self.train_NL, add_noise=add_noise)
+        self.x_train, self.y_train, self.p_train = self.prepare_trainset(self.nTrain, noise_level=self.trainNL, add_noise=add_noise)
         model.fit(self.x_train, self.y_train, nEpoch=nEpoch, batch=batch, verbose=verbose)
         model.nn_rescaler = lambda x: self.nn_rescaler(x)
         self.nn = model
         if self.save: model.save_model()
 
 
-    def test(self, nTest=100, test_NL=None, pmts=None, seed=None):
+    def test(self, nTest=100, testNL=None, pmts=None, seed=None):
         self.nTest = nTest       
-        if test_NL is None:
-            self.test_NL=self.nlList[0]
+        if testNL is None:
+            self.testNL=self.nlList[0]
             self.test_snr = self.snrList[0]
         else:
-            self.test_NL = test_NL
-            self.test_snr = self.snrList[self.nlList.index(test_NL)]
+            self.testNL = testNL
+            self.test_snr = self.nl2snr(testNL)
 
-        self.x_test, self.p_test = self.prepare_testset(nTest, pmts=pmts, noise_level=self.test_NL, seed=seed)
+        self.x_test, self.p_test = self.prepare_testset(nTest, pmts=pmts, noise_level=self.testNL, seed=seed)
         self.p_pred = self.nn.scale_predict(self.x_test)
 
 

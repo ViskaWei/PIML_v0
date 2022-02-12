@@ -22,10 +22,10 @@ class ObsW(BaseObs):
 
 
     def init_snr_W(self, flux_in_res):
-        self.noise_level_grid = [30,40,50,100,200, 300, 400, 500]
+        self.noise_level_grid = [10, 30,40,50,100,200, 300, 400, 500]
         self.snrList = [10, 20, 30]
 
-        self.snr2nl = self.get_snr2nl_fn(flux_in_res)
+        self.snr2nl, self.nl2snr = self.get_snr2nl_fn(flux_in_res)
         self.nlList = self.snr2nl(self.snrList)
         logging.info(f"nlList: {self.nlList}")  
         
@@ -38,8 +38,8 @@ class ObsW(BaseObs):
         print(sky.shape, step)
         dotSqrt = 2 * 5000 /  self.instrRes
         logging.info(f"instrument Res = {self.instrRes},  dotSqrt of {dotSqrt:.2f}")
-        f = BaseObs._get_snr2nl_fn(flux_in_res, sky, step, self.noise_level_grid, dotSqrt, nAvg=1)
-        return f
+        f, f_inv = BaseObs._get_snr2nl_fn(flux_in_res, sky, step, self.noise_level_grid, dotSqrt, nAvg=1)
+        return f, f_inv
 
     def make_obsflux(self, flux_in_res, noise_level=1):
         return BaseObs._make_obsflux(flux_in_res, self.sky_in_res, self.step, noise_level)

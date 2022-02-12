@@ -39,13 +39,8 @@ class NzDNN(DNN):
                         shuffle=shuffle, 
                         epochs=nEpoch, 
                         verbose=verbose)
-        if verbose == 0:
-            prints=f"| EP {nEpoch} |"
-            for key, value in self.model.history.history.items():
-                prints = prints +  f"{key[:5]}: {value[-1]:.4f} | "
-            logging.info(prints)
-        tf.keras.backend.clear_session()
-            # print(self.model.summary())
+        self.finish(nEpoch, verbose)
+
 
 
 

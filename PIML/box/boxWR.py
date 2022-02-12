@@ -54,7 +54,7 @@ class BoxWR(BaseBox):
         if self.onPCA:
             self.eigv0, self.pcflux, fns = self.prepare_PC_rbf(self.pdx0, self.pmt2pdx_scaler, self.flux, Obs=self.Obs, topk=self.topk, fast=fast)
             self.eigv = self.eigv0[:self.topk]
-            self.rbf_flux, self.rbf_flux_sigma, self.rbf_ak, self.rbf_ak_sigma, self.rbf_logflux_sigma, self.gen_nObs_noise = fns
+            self.rbf_flux, self.rbf_flux_sigma, self.rbf_ak, self.rbf_ak_sigma, self.rbf_logflux_sigma, self.rbf_logA, self.gen_nObs_noise = fns
         else:
             self.rbf_flux, self.rbf_flux_sigma = self.prepare_logflux_rbf(self.pdx0, self.pmt2pdx_scaler, self.flux, Obs=self.Obs)
 
@@ -345,7 +345,7 @@ class BoxWR(BaseBox):
 
     def prepare_pmts(self, N, pmts=None, odx=None):
         if pmts is None: 
-            rands, pmts = self.get_random_pmts(N, method="random", out_rand=True)
+            rands, pmts = self.get_random_pmts(N, method="random", outRnd=True)
         else:
             pmts = pmts[:N]
             rands = self.minmax_scaler(pmts)        
@@ -383,6 +383,15 @@ class BoxWR(BaseBox):
                 out = self.rbf_flux_sigma(pmts)
         return out
 
+    def aug_ak_in_pmts(self, pmts, noise_level, topk=None, seed=None):
+        aks, sigma = self.rbf_ak_sigma(pmts, topk=topk)
+        if seed is not None: np.random.seed(seed)
+        sigma = sigma * noise_level
+        noiseMat = np.random.normal(0, sigma, sigma.shape)
+        eigv = self.eigv0[:topk]
+        noisePC = noiseMat.dot(eigv.T) # convert noise into topk PC basis
+        bks = aks + noisePC
+        return bks
 
     def aug_flux_in_pmts(self, pmts, noise_level, seed=None):
         logModel, sigma_log = self.rbf_flux_sigma(pmts)
@@ -400,15 +409,7 @@ class BoxWR(BaseBox):
             out = self.aug_ak_in_pmts(pmts, noise_level, topk=topk, seed=seed)
         return out, pmts
 
-    def aug_ak_in_pmts(self, pmts, noise_level, topk=None, seed=None):
-        aks, sigma = self.rbf_ak_sigma(pmts, topk=topk)
-        if seed is not None: np.random.seed(seed)
-        sigma = sigma * noise_level
-        noiseMat = np.random.normal(0, sigma, sigma.shape)
-        eigv = self.eigv0[:topk]
-        noisePC = noiseMat.dot(eigv.T) # convert noise into topk PC basis
-        bks = aks + noisePC
-        return bks
+
 
     def prepare_noiseset(self, pmt, noise_level, nObs, topk=None):
         assert (noise_level > 1)

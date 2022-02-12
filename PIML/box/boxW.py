@@ -138,11 +138,11 @@ class BoxW(BaseBox):
         return out, pmts
 
     def prepare_testset(self, N, pmts=None, noise_level=1, eigv=None, odx=None):
-        x_test, p_test={}, {}
+        f_test, p_test={}, {}
         for R1 in self.Rs:
             pmts_R1 = None if pmts is None else pmts[R1]
-            x_test[R1], p_test[R1] = self.prepare_testset_R1(R1, N, pmts=pmts_R1, noise_level=noise_level, eigv=eigv, odx=odx)
-        return x_test, p_test
+            f_test[R1], p_test[R1] = self.prepare_testset_R1(R1, N, pmts=pmts_R1, noise_level=noise_level, eigv=eigv, odx=odx)
+        return f_test, p_test
 
     def prepare_logflux_on_PCA_R0(self, R0, pmts, noise_level=1):
         logfluxs, sigma_log = self.DRbf_flux_sigma[R0](pmts)

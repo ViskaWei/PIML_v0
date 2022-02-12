@@ -21,19 +21,19 @@ def main():
     if test:
         nTrain = 1024
         mtype = "NzDNN"
-        train_NL = 2
+        trainNL = 2
         nEpoch = 20
         batch = 512
     else:
         nTrain = 131072
         mtype = "NzDNN"
-        train_NL = 50
+        trainNL = 50
         nEpoch = 500
         batch = 512
 
     name=f"B{batch}_t{topk}"
 
-    d.init_train(odx=[0,1,2], mtype=mtype, train_NL=train_NL, nTrain=nTrain, save=1, name=name)
+    d.init_train(odx=[0,1,2], mtype=mtype, trainNL=trainNL, nTrain=nTrain, save=1, name=name)
     d.run(lr=0.03, dp=0.02, batch=batch, nEpoch=nEpoch, verbose=1)
 
 if __name__ == "__main__":

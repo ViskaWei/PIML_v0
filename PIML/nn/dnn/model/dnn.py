@@ -25,6 +25,7 @@ for device in devices:
     tf.config.experimental.set_memory_growth(device, True)
 logging.info(device)
 
+from PIML.nn.base.callbacks import TimingCallback
 
 
 
@@ -51,6 +52,8 @@ class DNN(object):
         self.log_dir = None
         self.noise_level = None
         self.ep = None
+        self.timeCallback = TimingCallback()
+
 
 
     def set_model_shape(self, input_dim, output_dim, hidden_dims=[]):
@@ -67,8 +70,9 @@ class DNN(object):
         self.dp = dp
         self.opt = self.get_opt(opt)
         self.loss = loss
-        # self.log_dir = "logs/fit/" + self.name        
+        # self.log_dir = "logs/fit/" + self.name   
         self.callbacks.append([
+            self.timeCallback,
             EarlyStopping(monitor='loss', patience=40),
             ReduceLROnPlateau('loss',patience=8, min_lr=0.000001, factor=0.6),
         ])
@@ -112,14 +116,20 @@ class DNN(object):
                     shuffle=True,
                     verbose=verbose
                     )
+        self.finish(nEpoch, verbose)
+        
+            # print(self.model.summary())
+    
+    def finish(self, nEpoch, verbose):
         if verbose == 0:
             prints=f"| EP {nEpoch} |"
             for key, value in self.model.history.history.items():
                 prints = prints +  f"{key[:5]}: {value[-1]:.4f} | "
-            print(prints)
+            logging.info(prints)
+        self.time = np.sum(self.timeCallback.logs)
+        logging.info(f"timing {self.time:.1f} sec")
         tf.keras.backend.clear_session()
-            # print(self.model.summary())
-    
+
     def log2(self,r):
         x = self.input_dim // r
         return int(2**np.floor(np.log2(x)))
@@ -183,11 +193,3 @@ class DNN(object):
         path = os.path.join(self.save_dir, self.name, 'model.h5')
         print("saving model to: ", path)
         self.model.save(path)
-    
-class TimingCallback(keras.callbacks.Callback):
-    def __init__(self, logs={}):
-        self.logs=[]
-    def on_epoch_begin(self, epoch, logs={}):
-        self.starttime = timer()
-    def on_epoch_end(self, epoch, logs={}):
-        self.logs.append(timer()-self.starttime)

@@ -5,6 +5,7 @@ from .IO import IO
 from .constants import Constants
 import logging
 
+np.set_printoptions(precision=3, suppress=False)
 
 class Util(Constants):
     """

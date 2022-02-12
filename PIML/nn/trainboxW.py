@@ -12,11 +12,11 @@ class TrainBoxW(BoxW):
         self.name= None
 
 
-    def init_train(self, odx=[0,1,2], mtype="DNN", save=1, train_NL=None, nTrain=1000, name=""):
+    def init_train(self, odx=[0,1,2], mtype="DNN", save=1, trainNL=None, nTrain=1000, name=""):
         self.odx  = odx
         self.nOdx = len(odx)
         self.mtype = mtype
-        self.train_NL = train_NL
+        self.trainNL = trainNL
         self.nTrain = nTrain
         self.save=save
         self.name = name
@@ -27,7 +27,7 @@ class TrainBoxW(BoxW):
     def prepare_model_R0(self, R0, lr=0.01, dp=0.0, nEpoch=None):
         NN = BaseNN()
         eigvk = self.DV[R0][:self.topk] if isinstance(self.eigv, dict) else self.eigv 
-        NN.set_model(self.mtype, noise_level=self.train_NL, eigv=eigvk)
+        NN.set_model(self.mtype, noise_level=self.trainNL, eigv=eigvk)
         NN.set_model_shape(self.nFtr, self.nOdx)
         NN.set_model_param(lr=lr, dp=dp, loss='mse', opt='adam')
         if self.save: 
@@ -49,7 +49,7 @@ class TrainBoxW(BoxW):
         logging.info(model.name)
         model.R0 = R0
         add_noise = False if self.mtype[:2] == "Nz" else True
-        x_train, y_train, _=self.prepare_trainset_R0(R0, self.nTrain, noise_level=self.train_NL, 
+        x_train, y_train, _=self.prepare_trainset_R0(R0, self.nTrain, noise_level=self.trainNL, 
                                             eigv=model.eigv, add_noise=add_noise, odx=self.odx)
         logging.info(f"{x_train[0].shape}, {x_train[1].shape}, {y_train.shape}")
         model.fit(x_train, y_train, nEpoch=nEpoch, batch=batch, verbose=verbose)

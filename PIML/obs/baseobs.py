@@ -48,7 +48,8 @@ class BaseObs(BaseSpec):
             SN.append(sn)
         logging.info(f"snr2nl-SN: {SN}")
         f = sp.interpolate.interp1d(SN, noise_level_grid, fill_value=0)
-        return f
+        f_inv = sp.interpolate.interp1d(noise_level_grid, SN, fill_value=0)
+        return f, f_inv
 
 
     @staticmethod

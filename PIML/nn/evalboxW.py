@@ -12,7 +12,8 @@ class EvalBoxW(TrainBoxW):
         self.pMins = {}
         self.pMaxs = {}
         self.x_test = None
-        self.test_NL = None
+        self.f_test = None
+        self.testNL = None
         self.p_pred = {}
         self.model_names = None
 
@@ -39,52 +40,54 @@ class EvalBoxW(TrainBoxW):
         self.setup_scalers(odx)
 
         self.nOdx = len(odx)
+        #FIXME 
         self.load_eigv(self.topk, stack=1)
         if isinstance(model_names, str): model_names = [model_names]
         for model_name in model_names:
             self.set_model_R0(model_name)
 
-    def test_R0(self, R0, x_test):
+    def set_scale_predict_R0(self, R0):
+        self.nn[R0].nn_rescaler = lambda x: self.rescale(x, R0)
+
+    def test(self, testNL=None, nTest=100, pmts=None, new=True, seed=922):
+        self.setup_scalers(self.odx)        
+        self.nTest = nTest
+        self.testNL = testNL or self.trainNL
+        self.nnRs = list(self.nn.keys())
+
+        if self.model_names is None:
+            [self.set_scale_predict_R0(R0) for R0 in self.nnRs]
+
+        if self.f_test is None or new:
+            self.f_test, self.p_test = self.prepare_testset(self.nTest, pmts=pmts, noise_level=self.testNL, eigv=None, odx=self.odx)
+
+        #FIXME 
+        # self.x_test = {}
+        # for R0, model in self.nn.items():
+        #     x_test_R0 = {}
+        #     p_pred_R0 = {}
+        #     for R1, flux in self.f_test.items():
+        #         x_test_R1 = self.flux.dot(model.eigv)            
+        #         x_test_R0[R1] = x_test_R1
+
+        vertical = 1 if self.nR > 2 else 0
+        self.init_eval()
+        self.eval(self.p_pred, self.p_test, vertical=vertical)
+        
+    def test_R0(self, R0):
         model = self.nn[R0]
         p_pred = {}
         for R, x_test in self.x_test.items():
             p_pred[R] = model.scale_predict(x_test)
         return p_pred
 
-    def set_scale_predict_R0(self, R0):
-        self.nn[R0].nn_rescaler = lambda x: self.rescale(x, R0)
-
-    def test(self, test_NL=None, nTest=100, pmts=None, new=True, seed=922):
-        self.setup_scalers(self.odx)        
-        self.nTest = nTest
-        self.test_NL = test_NL or self.train_NL
-        self.nnRs = list(self.nn.keys())
-
-        if self.model_names is None:
-            [self.set_scale_predict_R0(R0) for R0 in self.nnRs]
-
-        if self.x_test is None or new:
-            self.x_test, self.p_test = self.prepare_testset(self.nTest, pmts=pmts, noise_level=self.test_NL, seed=seed, odx=self.odx)
-        
-        for R0 in self.nnRs:
-            self.p_pred[R0] = self.test_R0(R0, self.x_test) 
-        vertical = 1 if self.nR > 2 else 0
-        self.init_eval()
-        self.eval(self.p_pred, self.p_test, vertical=vertical)
-
-    def init_test(self, model_names=None, topk=10, odx=[0,1,2], mtype="DNN", save=1, train_NL=None, nTrain=1000, name=""):
-        self.load_train(model_names, odx=odx, topk=topk)
-
-        
-
-
     #eval ---------------------------------------------------------------------------------
     def init_eval(self):
         self.PhyLong =  [EvalBoxW.PhyLong[odx_i] for odx_i in self.odx]
         self.init_plot()
-        # snr = self.estimate_snr(self.test_NL)
+        # snr = self.estimate_snr(self.testNL)
         # pmts = self.get_random_pmt(10)
-        # self.eval_pmts_noise(pmts, self.test_NL, nObs=100, n_box=0.2)
+        # self.eval_pmts_noise(pmts, self.testNL, nObs=100, n_box=0.2)
 
 
     def init_plot(self):
@@ -101,7 +104,7 @@ class EvalBoxW(TrainBoxW):
 
         # if eval:
         #     self.init_eval()
-        #     self.test(test_NL=self.train_NL, nTest=100)
+        #     self.test(testNL=self.trainNL, nTest=100)
 
     def eval(self, p_pred, p_test, vertical=0):
         print(self.model_names)
@@ -117,7 +120,7 @@ class EvalBoxW(TrainBoxW):
         f, axs = self.PLT.plot_acc(p_pred[R0][R0], p_test[R0], self.pMins[R0], self.pMaxs[R0], 
                                     RR=EvalBoxW.DRR[R0], c1=EvalBoxW.DRC[R0], axes_name = self.PhyLong, vertical=vertical)
         if snr is None:
-            f.suptitle(f"NL = {self.test_NL}")
+            f.suptitle(f"NL = {self.testNL}")
         else:
             f.suptitle(f"SNR = {snr:.2f}")
 
@@ -137,7 +140,7 @@ class EvalBoxW(TrainBoxW):
 
         f = self.PLT.plot_box_R0(R0, fns = fns, n_box=n_box)
         if snr is None:
-            f.suptitle(f"NL = {self.test_NL}")
+            f.suptitle(f"NL = {self.testNL}")
         else:
             f.suptitle(f"SNR = {snr:.2f}")
 
