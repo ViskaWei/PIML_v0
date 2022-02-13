@@ -19,6 +19,22 @@ class PlotDNN(BasePlot):
         self.PhyLong = None
         
     @staticmethod
+    def plot_DV(DV, wave=None, gap=0.1):
+        nPlot = len(DV)
+        f, axs = plt.subplots(1, nPlot, figsize=(5*nPlot, 10), facecolor="w")
+        for ii, (R, eigv) in enumerate(DV.items()):
+            ax = axs[ii]
+            for jj, eigv_i in enumerate(eigv):
+                if wave is None:
+                    ax.plot(eigv_i + jj * gap)
+                else:
+                    ax.plot(wave, eigv_i + jj * gap)
+            ax.set_title(f"{R}-NN")
+
+
+
+
+    @staticmethod
     def plot_acc(pred, truth, pMin, pMax, RR="", c1='r', fsize=4, axes_name=None, vertical=False):
         nData, nFtr = pred.shape
         height = fsize // 2 if vertical else fsize

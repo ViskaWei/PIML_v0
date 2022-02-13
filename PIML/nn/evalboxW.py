@@ -1,4 +1,5 @@
 import os
+import numpy as np
 from tensorflow.keras.models import load_model
 
 from PIML.nn.dnn.plotdnn import PlotDNN
@@ -11,10 +12,11 @@ class EvalBoxW(TrainBoxW):
         self.pRngs = {}
         self.pMins = {}
         self.pMaxs = {}
-        self.x_test = None
         self.f_test = None
         self.testNL = None
-        self.p_pred = {}
+        self.DPpred = {}
+        self.DXtest = None
+
         self.model_names = None
 
     def load_model(self, model_name, path=None):
@@ -61,25 +63,44 @@ class EvalBoxW(TrainBoxW):
         if self.f_test is None or new:
             self.f_test, self.p_test = self.prepare_testset(self.nTest, pmts=pmts, noise_level=self.testNL, eigv=None, odx=self.odx)
 
-        #FIXME 
-        # self.x_test = {}
-        # for R0, model in self.nn.items():
-        #     x_test_R0 = {}
-        #     p_pred_R0 = {}
-        #     for R1, flux in self.f_test.items():
-        #         x_test_R1 = self.flux.dot(model.eigv)            
-        #         x_test_R0[R1] = x_test_R1
+        self.DXtest = self.project_flux_on_PC() if self.onPCA else self.f_test
+
+        for R0 in self.nnRs:
+            self.DPpred[R0] = self.test_R0(R0)
+        
 
         vertical = 1 if self.nR > 2 else 0
         self.init_eval()
-        self.eval(self.p_pred, self.p_test, vertical=vertical)
+        self.eval(self.DPpred, self.p_test, vertical=vertical)
         
+    def project_flux_on_PC(self):
+        DXtest = {}
+        if isinstance(self.eigv, np.ndarray):
+            for R0, model in self.nn.items():
+                assert np.allclose(model.eigv, self.eigv)
+                DXtest_R0 = self.f_test[R0].dot(self.eigv.T)      
+                DXtest[R0] = DXtest_R0
+
+        elif isinstance(self.eigv, dict):
+            DXtest = {}
+            for R0, model in self.nn.items():
+                DXtest_R0 = {}
+                eigv = self.nn[R0].eigv
+                for R1, flux in self.f_test.items():
+                    DXtest_R0[R1] = flux.dot(eigv)
+
+                DXtest[R0] = DXtest_R0
+        return DXtest
+
     def test_R0(self, R0):
-        model = self.nn[R0]
-        p_pred = {}
-        for R, x_test in self.x_test.items():
-            p_pred[R] = model.scale_predict(x_test)
-        return p_pred
+        DPpred_R0 = {}
+        for R1, flux in self.DXtest.items():
+            if isinstance(flux, np.ndarray):
+                DPpred_R0[R1] = self.nn[R0].scale_predict(flux)
+            elif isinstance(flux, dict):
+                pass
+                #FIXME
+        return DPpred_R0
 
     #eval ---------------------------------------------------------------------------------
     def init_eval(self):
@@ -106,26 +127,26 @@ class EvalBoxW(TrainBoxW):
         #     self.init_eval()
         #     self.test(testNL=self.trainNL, nTest=100)
 
-    def eval(self, p_pred, p_test, vertical=0):
+    def eval(self, DPpred, p_test, vertical=0):
         print(self.model_names)
-        self.eval_acc(p_pred, p_test, vertical=vertical)
-        if len(p_pred) > 1: 
-            self.eval_cross(p_pred)
+        self.eval_acc(DPpred, p_test, vertical=vertical)
+        if len(DPpred) > 1: 
+            self.eval_cross(DPpred)
 
-    def eval_acc(self, p_pred, p_test, vertical=False):
-        for R0 in p_pred.keys():
-            self.eval_acc_R0(R0, p_pred, p_test, vertical=vertical)
+    def eval_acc(self, DPpred, p_test, vertical=False):
+        for R0 in DPpred.keys():
+            self.eval_acc_R0(R0, DPpred, p_test, vertical=vertical)
 
-    def eval_acc_R0(self, R0, p_pred, p_test, snr=None, vertical=False):
-        f, axs = self.PLT.plot_acc(p_pred[R0][R0], p_test[R0], self.pMins[R0], self.pMaxs[R0], 
+    def eval_acc_R0(self, R0, DPpred, p_test, snr=None, vertical=False):
+        f, axs = self.PLT.plot_acc(DPpred[R0][R0], p_test[R0], self.pMins[R0], self.pMaxs[R0], 
                                     RR=EvalBoxW.DRR[R0], c1=EvalBoxW.DRC[R0], axes_name = self.PhyLong, vertical=vertical)
         if snr is None:
             f.suptitle(f"NL = {self.testNL}")
         else:
             f.suptitle(f"SNR = {snr:.2f}")
 
-    def eval_cross(self, p_pred, n_box=1, snr=None):
-        crossMat = self.PLT.get_crossMat(p_pred)
+    def eval_cross(self, DPpred, n_box=1, snr=None):
+        crossMat = self.PLT.get_crossMat(DPpred)
         for R0 in self.nnRs:
             self.eval_cross_R0(R0, crossMat=crossMat, n_box=n_box, snr=snr)
 
@@ -136,7 +157,7 @@ class EvalBoxW(TrainBoxW):
             crossMat_R0 = crossMat[R0_idx]
         for ii, R1 in enumerate(self.Rs):
             lgd = None if crossMat is None else crossMat_R0[ii]   
-            fns = fns + [self.PLT.scatter_fn(self.p_pred[R0][R1], c=EvalBoxW.DRC[R1], s=1, lgd=lgd)]
+            fns = fns + [self.PLT.scatter_fn(self.DPpred[R0][R1], c=EvalBoxW.DRC[R1], s=1, lgd=lgd)]
 
         f = self.PLT.plot_box_R0(R0, fns = fns, n_box=n_box)
         if snr is None:
@@ -144,10 +165,10 @@ class EvalBoxW(TrainBoxW):
         else:
             f.suptitle(f"SNR = {snr:.2f}")
 
-    def eval_traj(self, R0, p_pred, n_box=0.1):
+    def eval_traj(self, R0, DPpred, n_box=0.1):
         fns = []
         # BoxW.DRC[R0]
-        fns = fns + [self.PLT.line_fn(p_pred, c="r", lgd=None)]
+        fns = fns + [self.PLT.line_fn(DPpred, c="r", lgd=None)]
 
         f = self.PLT.plot_box_R0(R0, fns = fns, n_box=n_box)
 
@@ -173,3 +194,4 @@ class EvalBoxW(TrainBoxW):
         pval = pnorm * self.pRngs[R] + self.pMins[R]
         return pval
 
+#

@@ -173,7 +173,8 @@ class dnnWR(BaseBox):
 
 
     def eval_acc(self):
-        f, axs = self.PLT.plot_acc(self.p_pred, self.p_test, self.pMin, self.pMax, RR=self.RR, axes_name = self.PhyLong)
+        f, axs = self.PLT.plot_acc(self.p_pred, self.p_test, self.pMin, self.pMax, 
+                                    c1=self.DRC[self.R], RR=self.RR, axes_name = self.PhyLong)
         if self.test_snr is not None:
             f.suptitle(f"SNR = {self.test_snr:.2f}")
 
