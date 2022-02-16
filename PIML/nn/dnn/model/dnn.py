@@ -33,6 +33,7 @@ from PIML.nn.base.callbacks import TimingCallback
 class DNN(object):
     def __init__(self):
         # super(Autoencoder, self).__init__()
+        
         # ------------model shape----------------
         self.input_dim = None
         self.output_dim = None
@@ -53,6 +54,7 @@ class DNN(object):
         self.noise_level = None
         self.ep = None
         self.timeCallback = TimingCallback()
+
 
 
 

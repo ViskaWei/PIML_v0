@@ -212,26 +212,26 @@ class BaseBox(Util):
         return logA, aks, v
     
     
-    def prepare_pca(self, logfluxs, top=None):
-        nPix = logfluxs.shape[1]
-        logA = np.mean(logfluxs, axis=1)
-        lognormModels = logfluxs - logA[:, None]
-        u,s,v = np.linalg.svd(lognormModels, full_matrices=False)
-        # self.eigv0 = v
+    # def prepare_pca(self, logfluxs, top=None):
+    #     nPix = logfluxs.shape[1]
+    #     logA = np.mean(logfluxs, axis=1)
+    #     lognormModels = logfluxs - logA[:, None]
+    #     u,s,v = np.linalg.svd(lognormModels, full_matrices=False)
+    #     # self.eigv0 = v
 
-        if top is not None: 
-            u = u[:, :top]
-            s = s[:top]
-            v = v[:top]
-            self.pcaDim = len(v)
-        nS = len(s)
-        logging.info(f"Top #{nS} eigs {s[:10].round(2)}")
-        assert np.allclose(v.dot(v.T), np.eye(nS))
-        assert np.allclose(np.sum(v[:-1], axis=1).mean(), 0.0) 
+    #     if top is not None: 
+    #         u = u[:, :top]
+    #         s = s[:top]
+    #         v = v[:top]
+    #         self.pcaDim = len(v)
+    #     nS = len(s)
+    #     logging.info(f"Top #{nS} eigs {s[:10].round(2)}")
+    #     assert np.allclose(v.dot(v.T), np.eye(nS))
+    #     assert np.allclose(np.sum(v[:-1], axis=1).mean(), 0.0) 
 
-        pcflux = u * s
-        assert np.allclose(lognormModels.dot(v.T), pcflux)
-        return logA, pcflux, v
+    #     pcflux = u * s
+    #     assert np.allclose(lognormModels.dot(v.T), pcflux)
+    #     return logA, pcflux, v
 
 #Obs --------------------------------------------------------------------------
     #TODO: fix it
