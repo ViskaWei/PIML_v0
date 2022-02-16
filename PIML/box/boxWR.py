@@ -20,10 +20,13 @@ class BoxWR(BaseBox):
     def __init__(self):
         super().__init__()
 
+
         self.LLH = LLH()
         self.topk = None
         self.Res = None
         
+    
+
 # init------------------------------------------------------------------------
     def init(self, W, R, Res, step, topk=10, onPCA=1, fast=False):
         self.init_W(W)

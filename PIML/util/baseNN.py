@@ -5,12 +5,14 @@ from ..nn.dnn.model.nzdnn import NzDNN
 from PIML.util.constants import Constants
 
 class BaseNN(Constants):
-    def __init__(self,):
+    def __init__(self, config=None):
         self.cls =None
         self.mtype = None
         self.log_dir = Constants.LOG_DIR
         self.save_dir = Constants.MODEL_DIR
+        self.init_from_config(config)
 
+    def config
 
 
     def set_model(self, mtype, noise_level=None, eigv=None):
